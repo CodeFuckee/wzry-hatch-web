@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>王者荣耀 · 英雄数据站</title>
+<script>
+/* 主题引导:localStorage 优先,否则跟随系统;在样式渲染前执行避免闪白 */
+(function () {
+  var t;
+  try { t = localStorage.getItem('wzry-theme'); } catch (e) {}
+  if (t !== 'light' && t !== 'dark') {
+    t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  document.documentElement.dataset.theme = t;
+})();
+</script>
+<style>
+  /* Material Symbols 图标字体(本地) */
+  @font-face {
+    font-family: 'Material Symbols Outlined';
+    src: url('./vendor/fonts/material-symbols-outlined.woff2') format('woff2');
+    font-display: block;
+  }
+  .ms {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal; font-style: normal;
+    font-size: 24px; line-height: 1; letter-spacing: normal;
+    text-transform: none; display: inline-block; white-space: nowrap;
+    word-wrap: normal; direction: ltr;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== M3 蓝色主题 tokens(浅色) ===== */
+  :root {
+    color-scheme: light;
+    --md-sys-color-primary: #0B57D0;
+    --md-sys-color-on-primary: #FFFFFF;
+    --md-sys-color-primary-container: #D3E3FD;
+    --md-sys-color-on-primary-container: #041E49;
+    --md-sys-color-secondary: #00639B;
+    --md-sys-color-on-secondary: #FFFFFF;
+    --md-sys-color-secondary-container: #C2E7FF;
+    --md-sys-color-on-secondary-container: #001E2C;
+    --md-sys-color-tertiary: #00696E;
+    --md-sys-color-tertiary-container: #C4EBFF;
+    --md-sys-color-on-tertiary-container: #001F24;
+    --md-sys-color-error: #B3261E;
+    --md-sys-color-on-error: #FFFFFF;
+    --md-sys-color-error-container: #F9DEDC;
+    --md-sys-color-on-error-container: #410E0B;
+    --md-sys-color-background: #F9F9FF;
+    --md-sys-color-on-background: #1A1B21;
+    --md-sys-color-surface: #F9F9FF;
+    --md-sys-color-on-surface: #1A1B21;
+    --md-sys-color-surface-variant: #E0E2EC;
+    --md-sys-color-on-surface-variant: #44474E;
+    --md-sys-color-surface-container-lowest: #FFFFFF;
+    --md-sys-color-surface-container-low: #F3F3FA;
+    --md-sys-color-surface-container: #EDF0F7;
+    --md-sys-color-surface-container-high: #E7EAF1;
+    --md-sys-color-surface-container-highest: #E2E4EB;
+    --md-sys-color-outline: #74777F;
+    --md-sys-color-outline-variant: #C4C6D0;
+    --md-sys-color-inverse-surface: #2F3036;
+    --md-sys-color-inverse-on-surface: #F1F0F7;
+    /* app 级 */
+    --app-win: #146C2E;
+    --app-ease: cubic-bezier(0.2, 0, 0, 1);
+    --md-icon-font: 'Material Symbols Outlined';
+  }
+  /* ===== M3 蓝色主题 tokens(深色) ===== */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --md-sys-color-primary: #A8C7FA;
+    --md-sys-color-on-primary: #062E6F;
+    --md-sys-color-primary-container: #0842A0;
+    --md-sys-color-on-primary-container: #D3E3FD;
+    --md-sys-color-secondary: #7FCFFF;
+    --md-sys-color-on-secondary: #00344D;
+    --md-sys-color-secondary-container: #004A66;
+    --md-sys-color-on-secondary-container: #C2E7FF;
+    --md-sys-color-tertiary: #86D6DD;
+    --md-sys-color-tertiary-container: #004F57;
+    --md-sys-color-on-tertiary-container: #B4EBF0;
+    --md-sys-color-error: #F2B8B5;
+    --md-sys-color-on-error: #601410;
+    --md-sys-color-error-container: #8C1D18;
+    --md-sys-color-on-error-container: #F9DEDC;
+    --md-sys-color-background: #111318;
+    --md-sys-color-on-background: #E3E2E9;
+    --md-sys-color-surface: #111318;
+    --md-sys-color-on-surface: #E3E2E9;
+    --md-sys-color-surface-variant: #44474E;
+    --md-sys-color-on-surface-variant: #C4C6D0;
+    --md-sys-color-surface-container-lowest: #0C0E13;
+    --md-sys-color-surface-container-low: #191C20;
+    --md-sys-color-surface-container: #1D2024;
+    --md-sys-color-surface-container-high: #282A2F;
+    --md-sys-color-surface-container-highest: #33353A;
+    --md-sys-color-outline: #8E9099;
+    --md-sys-color-outline-variant: #44474E;
+    --md-sys-color-inverse-surface: #E3E2E9;
+    --md-sys-color-inverse-on-surface: #2F3036;
+    --app-win: #6DD58C;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--md-sys-color-background);
+    color: var(--md-sys-color-on-surface);
+    font-family: 'Roboto', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ===== 顶部应用栏 (M3 top app bar) ===== */
+  .app-bar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 12px;
+    height: 64px; padding: 0 20px;
+    background: var(--md-sys-color-surface);
+    transition: box-shadow .2s var(--app-ease);
+  }
+  .app-bar.elevated { box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.06); }
+  .app-bar .logo {
+    display: flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 12px;
+    background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
+  }
+  .app-bar .title { font-size: 22px; font-weight: 500; letter-spacing: .3px; color: var(--md-sys-color-on-surface); }
+  .app-bar .sub {
+    margin-left: auto; font-size: 12px; color: var(--md-sys-color-on-surface-variant);
+    text-align: right; line-height: 1.5;
+  }
+  .app-bar .bp-link {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--md-sys-color-on-surface-variant); text-decoration: none;
+    font-size: 13px; padding: 7px 12px; border-radius: 20px;
+    border: 1px solid var(--md-sys-color-outline-variant);
+  }
+  .app-bar .bp-link .md-icon { font-size: 18px; }
+  .app-bar .bp-link:hover { background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface); }
+
+  /* ===== 筛选工具区 ===== */
+  .toolbar {
+    max-width: 1280px; margin: 20px auto 4px; padding: 0 16px;
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  }
+  md-outlined-text-field#search { flex: 1 1 260px; max-width: 340px; --md-outlined-text-field-container-shape: 24px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips md-filter-chip { --md-filter-chip-container-shape: 8px; }
+
+  /* ===== 英雄关系查询 ===== */
+  .relq-wrap {
+    max-width: 1280px; margin: 14px auto 0; padding: 0 16px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  }
+  .relq { position: relative; flex: 0 1 380px; min-width: 240px; }
+  .relq md-outlined-text-field { width: 100%; --md-outlined-text-field-container-shape: 24px; }
+  .rel-sug {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
+    background: var(--md-sys-color-surface-container-high);
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: 14px; overflow: hidden; max-height: 330px; overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,.18);
+  }
+  .rel-sug [role="option"] { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; }
+  .rel-sug [role="option"]:hover, .rel-sug [role="option"].active { background: var(--md-sys-color-surface-container-highest); }
+  .rel-sug img { width: 38px; height: 38px; border-radius: 50%; background: var(--md-sys-color-surface-container); flex: none; }
+  .rel-sug .si { min-width: 0; line-height: 1.35; }
+  .rel-sug .sn { font-size: 14px; font-weight: 600; color: var(--md-sys-color-on-surface); }
+  .rel-sug .st { font-size: 11.5px; color: var(--md-sys-color-on-surface-variant); }
+  .rel-sug .miss { padding: 12px; font-size: 13px; color: var(--md-sys-color-on-surface-variant); text-align: center; }
+  .relq-hint { font-size: 12px; color: var(--md-sys-color-on-surface-variant); }
+
+  /* ===== 卡片网格 (M3 card grid) ===== */
+  .grid {
+    max-width: 1280px; margin: 16px auto 48px; padding: 0 16px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 12px;
+  }
+  .grid .empty { grid-column: 1/-1; padding: 48px 0; text-align: center; color: var(--md-sys-color-on-surface-variant); }
+  .hero-card { cursor: pointer; border-radius: 12px; overflow: hidden; display: block; position: relative; }
+  .hero-card:hover, .hero-card:focus-visible { outline: 2px solid var(--md-sys-color-primary); }
+  .hero-card:focus-visible { outline-offset: 2px; }
+  :root[data-theme="dark"] .hero-card { border: 1px solid var(--md-sys-color-outline-variant); }
+  .hero-card img {
+    width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--md-sys-color-surface-container);
+  }
+  .hero-card .body { padding: 10px 12px 12px; }
+  .hero-card .nm { font-size: 15px; font-weight: 600; color: var(--md-sys-color-on-surface); }
+  .hero-card .tp { font-size: 11.5px; color: var(--md-sys-color-on-surface-variant); margin: 1px 0 6px; }
+  .hero-card .stats { display: flex; justify-content: space-between; font-size: 11.5px; }
+  .hero-card .stats .w { color: var(--app-win); font-weight: 600; }
+  .hero-card .stats .p { color: var(--md-sys-color-on-surface-variant); }
+  .trank {
+    position: absolute; top: 10px; left: 10px; z-index: 2;
+    padding: 1px 8px; border-radius: 8px; font-size: 11px; font-weight: 700;
+    background: rgba(20,22,30,.72); color: #fff;
+  }
+  .trank.no { left: auto; right: 10px; font-weight: 400; color: #fff; }
+  /* 梯队徽章:色阶拉开(红→橙→黄→蓝灰→灰),置于 .chip-sm 之前避免覆盖详情小徽章文字色 */
+  .t0{color:#FF7D71} .t1{color:#FFB95C} .t2{color:#E4C94F} .t3{color:#A8C7DC} .t4{color:#9AA0A6}
+
+  /* ===== 侧边详情 Sheet (M3 side sheet) ===== */
+  #scrim {
+    position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.32);
+    opacity: 0; pointer-events: none; transition: opacity .3s var(--app-ease);
+  }
+  :root[data-theme="dark"] #scrim { background: rgba(0,0,0,.5); }
+  #scrim.open { opacity: 1; pointer-events: auto; }
+  #sheet {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 41;
+    width: min(440px, 94vw);
+    background: var(--md-sys-color-surface-container-low);
+    border-radius: 28px 0 0 28px;
+    box-shadow: 0 4px 8px 3px rgba(0,0,0,.15), 0 1px 3px rgba(0,0,0,.3);
+    transform: translateX(105%); transition: transform .35s var(--app-ease);
+    overflow-y: auto; padding: 18px 20px 28px;
+  }
+  #sheet.open { transform: translateX(0); }
+  .sheet-head { display: flex; align-items: center; gap: 14px; }
+  .sheet-head img.av { width: 76px; height: 76px; border-radius: 50%; border: 3px solid var(--md-sys-color-primary-container); background: var(--md-sys-color-surface-container); }
+  .sheet-head .name { font-size: 24px; font-weight: 600; }
+  .sheet-head .tag { font-size: 12.5px; color: var(--md-sys-color-on-surface-variant); margin-top: 2px; }
+  .sheet-head md-icon-button.close { position: absolute; top: 10px; right: 10px; }
+
+  .stat-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
+  .stat-tile {
+    background: var(--md-sys-color-surface-container-high); border-radius: 12px; padding: 9px 6px 8px;
+    text-align: center;
+  }
+  .stat-tile .l { font-size: 10.5px; color: var(--md-sys-color-on-surface-variant); }
+  .stat-tile .v { font-size: 15.5px; font-weight: 600; color: var(--md-sys-color-primary); margin-top: 2px; white-space: nowrap; }
+
+  .sec { margin-top: 22px; }
+  .sec > .sec-h { display: flex; align-items: baseline; margin-bottom: 10px; }
+  .sec > .sec-h .t { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; color: var(--md-sys-color-primary); }
+  .sec-note { margin-top: 8px; font-size: 11px; line-height: 1.6; color: var(--md-sys-color-on-surface-variant); }
+
+  .rel-item {
+    display: flex; align-items: center; gap: 12px; padding: 9px 4px;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  }
+  .rel-item:last-child { border-bottom: none; }
+  .rel-item img { width: 44px; height: 44px; border-radius: 50%; background: var(--md-sys-color-surface-container); cursor: pointer; }
+  .rel-item .info { flex: 1; min-width: 0; }
+  .rel-item .n { font-size: 14px; cursor: pointer; }
+  .rel-item .n:hover { color: var(--md-sys-color-primary); text-decoration: underline; }
+  .rel-item .n:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; border-radius: 4px; }
+  .rel-item .m { font-size: 11px; color: var(--md-sys-color-on-surface-variant); margin-top: 1px; display: flex; gap: 6px; align-items: center; }
+  .rel-item .tail { display: flex; align-items: center; gap: 8px; }
+  .rel-item .val { font-size: 12.5px; font-weight: 600; color: var(--md-sys-color-primary); }
+  .rel-item md-linear-progress { width: 72px; --md-linear-progress-active-indicator-color: var(--md-sys-color-primary); --md-linear-progress-track-height: 5px; --md-linear-progress-active-indicator-height: 5px; }
+  .gain-up { color: var(--app-win); font-weight: 600; }
+  .trio-icons { display: flex; align-items: center; gap: 4px; }
+  .trio-icons img { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--md-sys-color-surface-container-low); }
+  .chip-sm {
+    display: inline-block; padding: 0 7px; border-radius: 6px; font-size: 10.5px; font-weight: 600;
+    background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container);
+  }
+  .foot { max-width: 1280px; margin: 0 auto; padding: 8px 16px 32px; font-size: 12px; color: var(--md-sys-color-on-surface-variant); }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "@material/web/": "./vendor/@material/web/",
+    "lit": "./vendor/lit/index.js",
+    "lit/": "./vendor/lit/",
+    "lit-element": "./vendor/lit-element/lit-element.js",
+    "lit-element/": "./vendor/lit-element/",
+    "lit-html": "./vendor/lit-html/lit-html.js",
+    "lit-html/": "./vendor/lit-html/",
+    "@lit/reactive-element": "./vendor/@lit/reactive-element/reactive-element.js",
+    "@lit/reactive-element/": "./vendor/@lit/reactive-element/",
+    "tslib": "./vendor/tslib/tslib.es6.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<div class="app-bar" id="appbar">
+  <span class="logo"><span class="ms">sports_esports</span></span>
+  <span class="title">王者荣耀 · 英雄数据站</span>
+  <span class="sub" id="subTitle">数据来源:王者营地 App</span>
+  <a class="bp-link" href="bp.html" aria-label="进入 BP 模拟" title="排位 BP 模拟">
+    <md-icon>sports_esports</md-icon><span>BP 模拟</span>
+  </a>
+  <md-icon-button id="themeBtn" aria-label="切换到深色主题"><md-icon>dark_mode</md-icon></md-icon-button>
+</div>
+
+<div class="toolbar">
+  <md-outlined-text-field id="search" placeholder="搜索英雄名 / 称号" aria-label="搜索英雄名或称号">
+    <md-icon slot="leading-icon">search</md-icon>
+  </md-outlined-text-field>
+  <div class="chips" id="chips"></div>
+  <md-outlined-select id="sort" value="default" aria-label="排序方式" style="min-width:150px">
+    <!-- 默认为官网 herolist 原生顺序(大致按英雄编号/上架顺序) -->
+    <md-select-option value="default">按编号排序</md-select-option>
+    <md-select-option value="winRate">按胜率 ↓</md-select-option>
+    <md-select-option value="showRate">按登场率 ↓</md-select-option>
+    <md-select-option value="banRate">按 Ban 率 ↓</md-select-option>
+  </md-select>
+</div>
+
+<div class="relq-wrap">
+  <div class="relq">
+    <md-outlined-text-field id="relQuery" placeholder="输入英雄名，查搭档 / 克制关系" aria-label="英雄关系查询">
+      <md-icon slot="leading-icon">person_search</md-icon>
+    </md-outlined-text-field>
+    <div id="relSug" class="rel-sug" hidden></div>
+  </div>
+  <span class="relq-hint">输入名字回车，查看 TA 的双排 / 三排搭档、TA 克制的英雄、克制 TA 的英雄</span>
+</div>
+
+<main class="grid" id="grid"></main>
+<div class="foot" id="foot">
+  数据抓取自王者营地公开接口 · 仅用于学习研究 · 图标版权归腾讯所有
+</div>
+
+<div id="scrim"></div>
+<aside id="sheet" aria-label="英雄详情"></aside>
+
+<script src="data.js?v=1793012423"></script>
+<script type="module">
+  import '@material/web/all.js';
+  import '@material/web/select/outlined-select.js';
+  import '@material/web/select/select-option.js';
+  import '@material/web/labs/card/elevated-card.js';
+
+  const { heroes, relations, builtAt } = window.HERO_DATA;
+  // 兜底:data.js 缺字段时回退(构建时间/现算版本),页面不出现「—」
+  const dataFetchedAt = window.HERO_DATA.dataFetchedAt || builtAt;
+  const sourceVersion = window.HERO_DATA.sourceVersion || (() => {
+    for (const d of Object.values(relations)) {
+      const u = d['克制'] && d['克制'].updateTime;
+      if (u) return u;
+    }
+    return '—';
+  })();
+  const byId = {}; heroes.forEach(h => byId[h.ename] = h);
+
+  document.getElementById('subTitle').innerHTML =
+    `数据更新 ${dataFetchedAt || '—'} · 营地版本 ${sourceVersion || '—'}<br><span id="heroCount"></span>`;
+
+  /* ---------- 工具(缺字段安全) ---------- */
+  const pct = (v, d = 1) => (v == null || !isFinite(v)) ? '—' : (v * 100).toFixed(d) + '%';
+  const signed = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(d) + '%';
+  const fx = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : v.toFixed(d);
+  const tClass = t => 't' + (String(t).match(/\d/) ? String(t).match(/\d/)[0] : '3');
+  function nameOf(id) { const h = byId[id]; return h ? h.cname : ('英雄' + id); }
+
+  /* 图标 404 兜底链(构建时已替换,此处防 CDN 后续变化) */
+  const altIcons = {}; heroes.forEach(h => { if (h.iconAlt && h.iconAlt.length) altIcons[h.ename] = h.iconAlt; });
+  window.imgFallback = function (el, id) {
+    const list = altIcons[id] || [];
+    const n = +(el.dataset.fb || 0);
+    if (n < list.length) { el.dataset.fb = n + 1; el.src = list[n]; }
+    else { el.onerror = null; el.style.opacity = .25; }
+  };
+
+  /* ---------- 主题切换 ---------- */
+  const themeBtn = document.getElementById('themeBtn');
+  function syncThemeBtn() {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    themeBtn.querySelector('md-icon').textContent = dark ? 'light_mode' : 'dark_mode';
+    themeBtn.setAttribute('aria-label', dark ? '切换到浅色主题' : '切换到深色主题');
+  }
+  themeBtn.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('wzry-theme', next); } catch (e) {}
+    syncThemeBtn();
+  });
+  syncThemeBtn();
+
+  /* ---------- 筛选 / 排序 ---------- */
+  let curType = '全部', curSort = 'default', kw = '';
+  const chipsEl = document.getElementById('chips');
+  const types = ['全部', ...new Set(heroes.map(h => h.hero_type_name).filter(Boolean))];
+  types.forEach(t => {
+    const chip = document.createElement('md-filter-chip');
+    chip.label = t;
+    if (t === '全部') chip.selected = true;
+    chip.addEventListener('click', () => {
+      curType = t;
+      chipsEl.querySelectorAll('md-filter-chip').forEach(x => x.selected = false);
+      chip.selected = true;
+      render();
+    });
+    chipsEl.appendChild(chip);
+  });
+  document.getElementById('search').addEventListener('input', e => { kw = e.target.value.trim(); render(); });
+  document.getElementById('sort').addEventListener('change', e => { curSort = e.target.value; render(); });
+
+  /* ---------- 英雄关系查询 ---------- */
+  const relQuery = document.getElementById('relQuery');
+  const relSug = document.getElementById('relSug');
+  let sugList = [], sugIdx = -1;
+
+  /* 文本 -> 英雄:精确名 > 名称前缀 > 名称/称号包含 */
+  function resolveHero(text) {
+    const t = (text || '').trim();
+    if (!t) return null;
+    return heroes.find(h => h.cname === t)
+        || heroes.find(h => (h.cname || '').startsWith(t))
+        || heroes.find(h => (h.cname || '').includes(t) || (h.title || '').includes(t))
+        || null;
+  }
+  function hideSug() { relSug.hidden = true; relSug.innerHTML = ''; sugList = []; sugIdx = -1; }
+  function renderSug() {
+    const t = relQuery.value.trim();
+    sugList = t ? heroes.filter(h => (h.cname || '').includes(t) || (h.title || '').includes(t)).slice(0, 8) : [];
+    sugIdx = -1;
+    if (!sugList.length) { hideSug(); return; }
+    relSug.innerHTML = sugList.map((h, i) => `<div role="option" data-i="${i}" aria-label="查询 ${h.cname}">
+      <img loading="lazy" src="${h.camp_icon}" alt="" onerror="imgFallback(this, ${h.ename})">
+      <div class="si"><div class="sn">${h.cname}</div><div class="st">${h.hero_type_name || ''} · ${h.title || ''}</div></div>
+    </div>`).join('');
+    relSug.hidden = false;
+  }
+  function pickHero(h) {
+    relQuery.value = h.cname;
+    hideSug();
+    openDetail(h.ename);
+  }
+  function renderMiss(t) {
+    relSug.innerHTML = `<div class="miss">未找到名为「${t}」的英雄</div>`;
+    relSug.hidden = false;
+  }
+  relQuery.addEventListener('input', renderSug);
+  relQuery.addEventListener('keydown', e => {
+    if (e.isComposing) return; /* 中文输入法选词回车不触发查询 */
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (relSug.hidden || !sugList.length) return;
+      e.preventDefault();
+      sugIdx = e.key === 'ArrowDown'
+        ? (sugIdx + 1) % sugList.length
+        : (sugIdx - 1 + sugList.length) % sugList.length;
+      [...relSug.querySelectorAll('[role="option"]')].forEach((el, i) => {
+        el.classList.toggle('active', i === sugIdx);
+        if (i === sugIdx) el.scrollIntoView({ block: 'nearest' });
+      });
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const picked = (sugIdx >= 0 && sugList[sugIdx]) || resolveHero(relQuery.value);
+      if (picked) pickHero(picked);
+      else renderMiss(relQuery.value.trim());
+      return;
+    }
+    if (e.key === 'Escape' && !relSug.hidden) {
+      /* 联想打开时 Esc 只收联想,不冒泡给抽屉的关闭逻辑 */
+      e.stopPropagation();
+      hideSug();
+    }
+  });
+  relSug.addEventListener('pointerdown', e => {
+    const opt = e.target.closest('[role="option"]');
+    if (opt) { e.preventDefault(); pickHero(sugList[+opt.dataset.i]); } /* pointerdown 先于输入框 blur,保证点击生效 */
+  });
+  document.addEventListener('pointerdown', e => {
+    if (!relSug.hidden && !e.target.closest('.relq')) hideSug();
+  });
+
+  function visibleHeroes() {
+    let list = heroes.filter(h =>
+      (curType === '全部' || (h.hero_type_name || '').includes(curType)) &&
+      (!kw || (h.cname || '').includes(kw) || (h.title || '').includes(kw)));
+    if (curSort !== 'default') {
+      const k = curSort;
+      list = list.slice().sort((a, b) =>
+        ((b.camp_stats && b.camp_stats[k]) || -1) - ((a.camp_stats && a.camp_stats[k]) || -1));
+    }
+    return list;
+  }
+
+  /* ---------- 网格 ---------- */
+  function render() {
+    const grid = document.getElementById('grid');
+    const list = visibleHeroes();
+    const countEl = document.getElementById('heroCount');
+    const filtered = kw || curType !== '全部';
+    countEl.textContent = filtered
+      ? `匹配 ${list.length} / ${heroes.length} 名英雄`
+      : `${heroes.length} 名英雄`;
+    if (!list.length) { grid.innerHTML = '<div class="empty">没有匹配的英雄</div>'; return; }
+    grid.innerHTML = list.map(h => {
+      const s = h.camp_stats;
+      const tr = s && s.tRank
+        ? `<span class="trank ${tClass(s.tRank)}">${s.tRank}</span>`
+        : '<span class="trank no">暂无统计</span>';
+      const stats = (s && (s.winRate != null || s.showRate != null))
+        ? `<div class="stats">${s.winRate != null ? `<span class="w">胜率 ${pct(s.winRate)}</span>` : ''}${s.showRate != null ? `<span class="p">登场 ${pct(s.showRate)}</span>` : ''}</div>`
+        : `<div class="stats"><span class="p">${s ? '统计不全' : '营地无该英雄统计'}</span></div>`;
+      return `<md-elevated-card class="hero-card" data-id="${h.ename}" role="button" tabindex="0" aria-label="查看 ${h.cname} 的克制与搭档数据">
+        <img loading="lazy" src="${h.camp_icon}" alt="${h.cname}" onerror="imgFallback(this, ${h.ename})">
+        <div class="body">${tr}
+          <div class="nm">${h.cname}</div>
+          <div class="tp">${h.hero_type_name || ''} · ${h.title || ''}</div>
+          ${stats}
+        </div>
+      </md-elevated-card>`;
+    }).join('');
+    grid.querySelectorAll('.hero-card').forEach(el => el.addEventListener('click', () => openDetail(+el.dataset.id)));
+  }
+  /* 卡片键盘激活(Enter / 空格) */
+  document.getElementById('grid').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const card = e.target.closest('.hero-card');
+    if (!card) return;
+    e.preventDefault();
+    openDetail(+card.dataset.id);
+  });
+
+  /* ---------- 详情侧板 ---------- */
+  const scrim = document.getElementById('scrim');
+  const sheet = document.getElementById('sheet');
+  function closeModal() {
+    scrim.classList.remove('open'); sheet.classList.remove('open');
+  }
+  function openDetail(id) {
+    const h = byId[id]; const r = relations[id];
+    if (!h) return;
+    const s = h.camp_stats;
+
+    const kz = r && r['克制'] && r['克制'].list;
+    const bkz = r && r['被克制'] && r['被克制'].list;
+    const duo = r && r['双排组合'] && r['双排组合'].list;
+    const trio = r && r['三排组合'] && r['三排组合'].list;
+    const upd = r && r['克制'] ? r['克制'].updateTime : '';
+
+    const tiles = [];
+    if (s) {
+      const map = [
+        ['梯队', s.tRank != null ? s.tRank : null],
+        ['胜率', s.winRate != null ? pct(s.winRate) : null],
+        ['登场率', s.showRate != null ? pct(s.showRate) : null],
+        ['Ban率', s.banRate != null ? pct(s.banRate) : null],
+        ['场均输出', s.output != null ? Math.round(s.output).toLocaleString() : null],
+        ['场均承伤', s.suffer != null ? Math.round(s.suffer).toLocaleString() : null],
+        ['场均助攻', s.assist != null ? s.assist : null],
+        ['MVP率', s.mvp != null ? pct(s.mvp) : null],
+      ];
+      for (const [l, v] of map) if (v != null) tiles.push(`<div class="stat-tile"><div class="l">${l}</div><div class="v">${v}</div></div>`);
+    }
+    const head = `
+      <div class="sheet-head">
+        <img class="av" src="${h.camp_icon}" onerror="imgFallback(this, ${id})">
+        <div>
+          <div class="name">${h.cname}</div>
+          <div class="tag">${h.title || ''} · ${h.hero_type_name || ''} · 皮肤 ${(h.skin_name || '').split('|').filter(Boolean).length} 款</div>
+        </div>
+        <md-icon-button class="close" aria-label="关闭详情" onclick="closeModal()"><md-icon>close</md-icon></md-icon-button>
+      </div>
+      <div class="stat-tiles">${tiles.length ? tiles.join('') : '<div style="color:var(--md-sys-color-on-surface-variant);font-size:13px">营地暂无该英雄统计数据</div>'}</div>
+      ${(function () {
+        const parts = [];
+        if (s && s.source_version) parts.push('统计版本 ' + s.source_version);
+        if (s && s.extended_version && s.extended_version !== s.source_version) parts.push('扩展榜 ' + s.extended_version);
+        if (upd) parts.push('关系版本 ' + upd);
+        return parts.length ? `<div style="margin-top:6px;font-size:11px;color:var(--md-sys-color-on-surface-variant);text-align:right">${parts.join(' · ')}</div>` : '';
+      })()}`;
+
+    const sec = (title, rowsHtml, note) => rowsHtml
+      ? `<div class="sec"><div class="sec-h"><span class="t"><span class="ms" style="font-size:18px">insights</span>${title}</span></div><div>${rowsHtml}</div>${note ? `<div class="sec-note">${note}</div>` : ''}</div>` : '';
+
+    const counterRow = (it, isKz) => {
+      const pid = isKz ? it.kzHeroId : it.bkzHeroId;
+      const param = isKz ? it.kzParam : it.bkzParam;
+      const w = Math.min(100, Math.max(8, (param || 0) / 0.10 * 100));
+      return `<div class="rel-item">
+        <img loading="lazy" src="${it.szHeroIcon}" onclick="openDetail(${pid})" title="查看 ${it.szTitle}" alt="">
+        <div class="info">
+          <div class="n" role="button" tabindex="0" aria-label="查看 ${it.szTitle} 的详情" onclick="openDetail(${pid})">${it.szTitle}</div>
+          <div class="m">${it.szHeroType || ''} <span class="chip-sm ${tClass(it.tRank)}">${it.tRank || ''}</span></div>
+        </div>
+        <div class="tail"><md-linear-progress value="${(w / 100).toFixed(3)}"></md-linear-progress><span class="val" title="营地克制指数:对位胜率优势,幅度越大克制关系越明显">${signed(param)}</span></div>
+      </div>`;
+    };
+
+    const partnerImgs = ids => ids.map(i => {
+      const hh = byId[i];
+      return `<img loading="lazy" src="${hh ? hh.camp_icon : ''}" title="${hh ? hh.cname : i}" alt="${hh ? hh.cname : ''}" style="cursor:pointer" onclick="openDetail(${i})" onerror="imgFallback(this, ${i})">`;
+    }).join('<span class="ms" style="font-size:14px;color:var(--md-sys-color-primary)">add</span>');
+
+    const duoRow = it => `<div class="rel-item">
+      <div class="trio-icons">${partnerImgs([it.dfHeroId1, it.dfHeroId2])}</div>
+      <div class="info">
+        <div class="n">${[it.dfHeroId1, it.dfHeroId2].map(nameOf).join(' + ')}</div>
+        <div class="m">同场胜率 <span class="gain-up">${signed(it.winRateGain)}</span> · 登场 ${signed(it.showRateGain)}</div>
+      </div>
+      <div class="tail"><span class="val" title="营地双排指数:综合两人同场胜率提升与登场变化,越高搭配收益越大">${fx(it.dfParam)}</span></div>
+    </div>`;
+
+    const trioRow = it => {
+      const ids = [it.tfHeroId1, it.tfHeroId2, it.tfHeroId3];
+      return `<div class="rel-item">
+        <div class="trio-icons">${partnerImgs(ids)}</div>
+        <div class="info">
+          <div class="n">${ids.map(nameOf).join(' + ')}</div>
+          <div class="m">组合强度</div>
+        </div>
+        <div class="tail"><span class="val" title="营地三排组合强度:三人同场的组合收益参考值,越高越好">${fx(it.tfParam)}</span></div>
+      </div>`;
+    };
+
+    const sortList = (arr, f) => arr.slice().sort((a, b) => f(b) - f(a));
+    const nm = h.cname;
+    const noRel = !kz && !bkz && !duo && !trio;
+    const body = noRel
+      ? '<div class="sec-note" style="margin-top:16px">营地暂无该英雄的关系数据。</div>'
+      : sec(`${nm} 克制的英雄(${kz ? kz.length : 0})`, kz && sortList(kz, x => x.kzParam).map(x => counterRow(x, true)).join(''),
+          `克制指数为营地口径的对位胜率优势,数值越大,${nm} 的优势越明显。点击名字可跳转对应英雄。`) +
+        sec(`克制 ${nm} 的英雄(${bkz ? bkz.length : 0})`, bkz && sortList(bkz, x => x.bkzParam).map(x => counterRow(x, false)).join(''),
+          `克制指数为营地口径的对位胜率优势,数值越大,该英雄对 ${nm} 的克制越强。点击名字可跳转对应英雄。`) +
+        sec(`${nm} 的双排搭档(${duo ? duo.length : 0})`, duo && sortList(duo, x => x.dfParam).map(duoRow).join(''),
+          '双排指数为营地组合参考值:综合两人同场的胜率提升与登场变化,越高搭配收益越大。') +
+        sec(`含 ${nm} 的三排组合(${trio ? trio.length : 0})`, trio && sortList(trio, x => x.tfParam).map(trioRow).join(''),
+          '组合强度为营地三排参考值,数值越高组合收益越大。');
+
+    sheet.innerHTML = head + body;
+
+    scrim.classList.add('open');
+    sheet.classList.add('open');
+    sheet.scrollTop = 0;
+  }
+  window.closeModal = closeModal;
+  window.openDetail = openDetail;
+
+  /* 详情内关系英雄名字的键盘激活 */
+  sheet.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target.closest('[role="button"]');
+    if (!el) return;
+    e.preventDefault();
+    el.click();
+  });
+
+  scrim.addEventListener('click', closeModal);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  /* ---------- 启动 ---------- */
+  render();
+  document.getElementById('foot').textContent =
+    '数据抓取自王者营地公开接口 · 仅用于学习研究 · 图标版权归腾讯所有';
+  window.addEventListener('scroll', () => {
+    document.getElementById('appbar').classList.toggle('elevated', window.scrollY > 4);
+  }, { passive: true });
+</script>
+</body>
+</html>
