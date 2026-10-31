@@ -133,6 +133,12 @@
     margin-left: auto; font-size: 12px; color: var(--md-sys-color-on-surface-variant);
     text-align: right; line-height: 1.5;
   }
+  .app-bar .data-ver {
+    font-size: 12px; color: var(--md-sys-color-on-surface-variant);
+    white-space: nowrap; padding: 5px 12px;
+    border: 1px dashed var(--md-sys-color-outline-variant); border-radius: 14px;
+  }
+  @media (max-width: 720px) { .app-bar .data-ver { display: none; } }
   .app-bar .bp-link {
     display: inline-flex; align-items: center; gap: 4px;
     color: var(--md-sys-color-on-surface-variant); text-decoration: none;
@@ -284,6 +290,7 @@
   <span class="logo"><span class="ms">sports_esports</span></span>
   <span class="title">王者荣耀 · 英雄数据站</span>
   <span class="sub" id="subTitle">数据来源:王者营地 App</span>
+  <span class="data-ver" id="dataVer" title="营地统计榜单版本,随每日数据更新滚动"></span>
   <a class="bp-link" href="bp.html" aria-label="进入 BP 模拟" title="排位 BP 模拟">
     <md-icon>sports_esports</md-icon><span>BP 模拟</span>
   </a>
@@ -343,6 +350,14 @@
 
   document.getElementById('subTitle').innerHTML =
     `数据更新 ${dataFetchedAt || '—'} · 营地版本 ${sourceVersion || '—'}<br><span id="heroCount"></span>`;
+
+  /* 顶栏数据版本 = 统计榜单版本(全量英雄最大 source_version),随每日数据更新滚动 */
+  const boardVer = String(heroes.reduce((m, h) => Math.max(m, +(h.camp_stats && h.camp_stats.source_version) || 0), 0) || '');
+  if (boardVer) {
+    const verEl = document.getElementById('dataVer');
+    verEl.textContent = '数据版本 ' + boardVer;
+    verEl.title = `营地统计榜单版本 ${boardVer} · 数据更新 ${dataFetchedAt || '—'}`;
+  }
 
   /* ---------- 工具(缺字段安全) ---------- */
   const pct = (v, d = 1) => (v == null || !isFinite(v)) ? '—' : (v * 100).toFixed(d) + '%';

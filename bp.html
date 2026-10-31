@@ -389,9 +389,16 @@
   const { heroes } = window.HERO_DATA;
   const byId = {}; heroes.forEach(h => byId[h.ename] = h);
 
-  /* 顶栏数据版本显示(缺字段时回退 builtAt) */
+  /* 顶栏数据版本 = 统计榜单版本(缺字段回退抓取时间) */
   const dataBuilt = window.HERO_DATA.dataFetchedAt || window.HERO_DATA.builtAt;
-  if (dataBuilt) document.getElementById('dataVer').textContent = '数据版本 ' + dataBuilt;
+  const boardVer = String(heroes.reduce((m, h) => Math.max(m, +(h.camp_stats && h.camp_stats.source_version) || 0), 0) || '');
+  const verEl = document.getElementById('dataVer');
+  if (boardVer && verEl) {
+    verEl.textContent = '数据版本 ' + boardVer;
+    verEl.title = `营地统计榜单版本 ${boardVer} · 数据抓取 ${dataBuilt || '—'}`;
+  } else if (dataBuilt && verEl) {
+    verEl.textContent = '数据版本 ' + dataBuilt;
+  }
 
   /* ---------- 主题切换(与主页共用 localStorage) ---------- */
   const themeBtn = document.getElementById('themeBtn');
