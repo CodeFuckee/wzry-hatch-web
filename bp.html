@@ -124,6 +124,11 @@
   .bp-bar .op .ms { font-size: 18px; }
   .bp-bar .op.warn { border-color: var(--app-red); color: var(--app-red); font-weight: 600; }
   #themeBtn { color: var(--md-sys-color-on-surface-variant); }
+  .bp-bar .data-ver {
+    font-size: 12px; color: var(--md-sys-color-on-surface-variant);
+    white-space: nowrap; padding: 5px 12px;
+    border: 1px dashed var(--md-sys-color-outline-variant); border-radius: 14px;
+  }
 
   /* ===== BP 台 ===== */
   .board {
@@ -327,6 +332,7 @@
   <a class="back" href="index.html"><span class="ms" style="font-size:18px">arrow_back</span>数据站</a>
   <span class="ttl">排位 BP 模拟</span>
   <span class="sp"></span>
+  <span class="data-ver" id="dataVer" title="数据抓取时间,与主页数据一致"></span>
   <button class="op" id="undoBtn"><span class="ms">undo</span>悔一手</button>
   <button class="op" id="resetBtn"><span class="ms">restart_alt</span>重置</button>
   <md-icon-button id="themeBtn" aria-label="切换深浅色主题"><md-icon>dark_mode</md-icon></md-icon-button>
@@ -382,6 +388,10 @@
 
   const { heroes } = window.HERO_DATA;
   const byId = {}; heroes.forEach(h => byId[h.ename] = h);
+
+  /* 顶栏数据版本显示(缺字段时回退 builtAt) */
+  const dataBuilt = window.HERO_DATA.dataFetchedAt || window.HERO_DATA.builtAt;
+  if (dataBuilt) document.getElementById('dataVer').textContent = '数据版本 ' + dataBuilt;
 
   /* ---------- 主题切换(与主页共用 localStorage) ---------- */
   const themeBtn = document.getElementById('themeBtn');
