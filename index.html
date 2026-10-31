@@ -131,22 +131,31 @@
   .app-bar .title { font-size: 22px; font-weight: 500; letter-spacing: .3px; color: var(--md-sys-color-on-surface); }
   .app-bar .sub {
     margin-left: auto; font-size: 12px; color: var(--md-sys-color-on-surface-variant);
-    text-align: right; line-height: 1.5;
+    line-height: 1.5;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .app-bar .data-ver {
     font-size: 12px; color: var(--md-sys-color-on-surface-variant);
-    white-space: nowrap; padding: 5px 12px;
-    border: 1px dashed var(--md-sys-color-outline-variant); border-radius: 14px;
+    white-space: nowrap; height: 32px; line-height: 30px; padding: 0 12px;
+    border: 1px dashed var(--md-sys-color-outline-variant); border-radius: 16px;
   }
-  @media (max-width: 720px) { .app-bar .data-ver { display: none; } }
+  @media (max-width: 820px) { .app-bar .data-ver { display: none; } }
   .app-bar .bp-link {
-    display: inline-flex; align-items: center; gap: 4px;
+    display: inline-flex; align-items: center; gap: 6px; flex: none;
+    height: 32px; padding: 0 14px;
     color: var(--md-sys-color-on-surface-variant); text-decoration: none;
-    font-size: 13px; padding: 7px 12px; border-radius: 20px;
+    font-size: 13px; border-radius: 16px;
     border: 1px solid var(--md-sys-color-outline-variant);
   }
   .app-bar .bp-link .md-icon { font-size: 18px; }
   .app-bar .bp-link:hover { background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface); }
+  @media (max-width: 760px) { .app-bar .sub { display: none; } }
+  @media (max-width: 520px) {
+    .app-bar { padding: 0 12px; gap: 8px; }
+    .app-bar .title { font-size: 18px; }
+    .app-bar .bp-link { padding: 0 10px; }
+    .app-bar .bp-link > span { display: none; }
+  }
 
   /* ===== 筛选工具区 ===== */
   .toolbar {
@@ -154,6 +163,12 @@
     display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
   }
   md-outlined-text-field#search { flex: 1 1 260px; max-width: 340px; --md-outlined-text-field-container-shape: 24px; }
+  /* 排序下拉与搜索框统一:同 24px 胶圆角,弹出菜单 16px 圆角 */
+  md-outlined-select#sort {
+    min-width: 150px;
+    --md-outlined-select-text-field-container-shape: 24px;
+    --md-menu-container-shape: 16px;
+  }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chips md-filter-chip { --md-filter-chip-container-shape: 8px; }
 
@@ -298,11 +313,11 @@
 </div>
 
 <div class="toolbar">
+  <div class="chips" id="chips"></div>
   <md-outlined-text-field id="search" placeholder="搜索英雄名 / 称号" aria-label="搜索英雄名或称号">
     <md-icon slot="leading-icon">search</md-icon>
   </md-outlined-text-field>
-  <div class="chips" id="chips"></div>
-  <md-outlined-select id="sort" value="default" aria-label="排序方式" style="min-width:150px">
+  <md-outlined-select id="sort" value="default" aria-label="排序方式">
     <!-- 默认为官网 herolist 原生顺序(大致按英雄编号/上架顺序) -->
     <md-select-option value="default">按编号排序</md-select-option>
     <md-select-option value="winRate">按胜率 ↓</md-select-option>
@@ -348,8 +363,9 @@
   })();
   const byId = {}; heroes.forEach(h => byId[h.ename] = h);
 
-  document.getElementById('subTitle').innerHTML =
-    `数据更新 ${dataFetchedAt || '—'} · 营地版本 ${sourceVersion || '—'}<br><span id="heroCount"></span>`;
+  const subEl = document.getElementById('subTitle');
+  subEl.innerHTML = `数据更新 ${dataFetchedAt || '—'} · <span id="heroCount"></span>`;
+  subEl.title = `数据来源:王者营地 App · 数据更新 ${dataFetchedAt || '—'} · 营地版本 ${sourceVersion || '—'}`;
 
   /* 顶栏数据版本 = 统计榜单版本(全量英雄最大 source_version),随每日数据更新滚动 */
   const boardVer = String(heroes.reduce((m, h) => Math.max(m, +(h.camp_stats && h.camp_stats.source_version) || 0), 0) || '');
