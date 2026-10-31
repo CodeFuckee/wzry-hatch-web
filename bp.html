@@ -146,6 +146,7 @@
     border-radius: 16px; padding: 14px;
     border-top: 3px solid var(--side-c);
     transition: box-shadow .2s var(--app-ease);
+    display: flex; flex-direction: column;
   }
   .side.blue { --side-c: var(--app-blue); }
   .side.red  { --side-c: var(--app-red); }
@@ -248,28 +249,28 @@
   .finish[hidden] { display: none; }
   .verdict { font-size: 12.5px; color: var(--md-sys-color-on-surface-variant); line-height: 1.8; }
 
-  /* ===== 对方意图分析(禁用护核推断) ===== */
-  .intent {
-    margin-top: 14px; text-align: left;
-    border: 1px solid var(--md-sys-color-outline-variant); border-radius: 14px;
-    padding: 10px 12px 8px; background: var(--md-sys-color-surface-container-low);
+  /* ===== 对方意图分析(禁用护核推断):直接标注在英雄池卡片上 ===== */
+  .pool .p-card .intent-badges {
+    position: absolute; right: 4px; bottom: 25px; z-index: 2;
+    display: inline-flex; gap: 2px;
   }
-  .intent[hidden] { display: none; }
-  .intent-h { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--md-sys-color-on-surface); }
-  .intent-h .ms { font-size: 16px; color: var(--md-sys-color-primary); }
-  .intent-side { margin-left: auto; display: flex; gap: 4px; }
-  .is-btn {
-    border: 1px solid var(--md-sys-color-outline-variant); background: none; cursor: pointer;
-    color: var(--md-sys-color-on-surface-variant); font-size: 11px; padding: 2px 9px; border-radius: 10px;
+  .pool .p-card .intent-val {
+    padding: 1px 5px; border-radius: 8px;
+    background: var(--md-sys-color-primary); color: #fff;
+    font-size: 10px; font-weight: 700; line-height: 1.4;
   }
-  .is-btn.on { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); border-color: transparent; font-weight: 600; }
-  .intent-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--md-sys-color-outline-variant); }
-  .intent-row:last-child { border-bottom: none; }
-  .intent-row img { width: 34px; height: 34px; border-radius: 50%; background: var(--md-sys-color-surface-container); flex: none; }
-  .intent-row .in { font-size: 13px; font-weight: 600; color: var(--md-sys-color-on-surface); }
-  .intent-row .ir { font-size: 11px; color: var(--md-sys-color-on-surface-variant); line-height: 1.5; margin-top: 1px; }
-  .intent-row .is { margin-left: auto; font-size: 14px; font-weight: 700; color: var(--md-sys-color-primary); white-space: nowrap; }
-  .intent-note { font-size: 12px; color: var(--md-sys-color-on-surface-variant); padding: 4px 0 2px; }
+  /* 配色随指向侧:蓝=蓝方禁用指向,红=红方禁用指向;双侧指向拆成两个标签 */
+  .pool .p-card .intent-val.intent-blue { background: var(--app-blue); }
+  .pool .p-card .intent-val.intent-red { background: var(--app-red); }
+  .intent-legend {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; color: var(--md-sys-color-on-surface-variant);
+  }
+  .intent-legend .ms { font-size: 14px; color: var(--md-sys-color-primary); }
+  .intent-legend .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .intent-legend .dot.b { background: var(--app-blue); }
+  .intent-legend .dot.r { background: var(--app-red); }
+  .intent-legend[hidden] { display: none; }
 
   /* ===== 英雄池 ===== */
   .pool-wrap { margin: 16px auto 40px; padding: 0 16px; }
@@ -324,6 +325,7 @@
     padding: 0 6px; border-radius: 0 0 8px 0; font-size: 10px; font-weight: 700;
     background: rgba(20,22,30,.72); color: #fff;
   }
+
   .t0{color:#FF7D71} .t1{color:#FFB95C} .t2{color:#E4C94F} .t3{color:#A8C7DC} .t4{color:#9AA0A6}
 
   @media (max-width: 860px) {
@@ -391,16 +393,6 @@
     <button class="fp-toggle" id="fpBtn" hidden title="切换先选方(仅禁用阶段可改)"></button>
     <button class="start-pick" id="startPick" hidden><span class="ms">skip_next</span>开始选人</button>
     <div class="timeline" id="timeline" aria-label="选人流程进度" hidden></div>
-    <div class="intent" id="intent" hidden>
-      <div class="intent-h">
-        <span class="ms">psychology</span><span>对方意图分析</span>
-        <span class="intent-side">
-          <button type="button" class="is-btn on" id="intentRed">红方</button>
-          <button type="button" class="is-btn" id="intentBlue">蓝方</button>
-        </span>
-      </div>
-      <div id="intentBody"></div>
-    </div>
     <div class="finish" id="finishTip" hidden><span class="ms">emoji_events</span>BP 完成,阵容已定!</div>
     <div class="verdict" id="verdict"></div>
   </div>
@@ -420,6 +412,9 @@
       <md-icon slot="leading-icon">search</md-icon>
     </md-outlined-text-field>
     <div class="chips" id="chips"></div>
+    <span class="intent-legend" id="intentLegend" hidden><span class="ms">psychology</span>已按对方禁用标注克制值
+      <span class="dot b"></span>蓝方指向 <span class="dot r"></span>红方指向
+    </span>
   </div>
   <div class="pool" id="pool"></div>
 </section>
@@ -459,7 +454,7 @@
 
   /* ---------- 工具 ---------- */
   const pct = (v, d = 1) => (v == null || !isFinite(v)) ? '—' : (v * 100).toFixed(d) + '%';
-  const signed = (v, d = 1) => (v == null || !isFinite(v)) ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(d) + '%';
+  const signed = (v, d = 1) => (v == null || !isFinite(v)) ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(d); /* 克制值(营地口径),非百分比 */
   const tClass = t => 't' + (String(t).match(/\d/) ? String(t).match(/\d/)[0] : '3');
   const BAN_MAX = 5, PICK_MAX = 5;
 
@@ -520,7 +515,18 @@
 
   function renderPool() {
     const pool = document.getElementById('pool');
-    const list = poolHeroes();
+    /* 被禁英雄不再出现在池中(禁用情况见上方两侧的禁用槽位);选用阶段的已选英雄保留(灰化打勾) */
+    let list = poolHeroes().filter(h => !isBanned(h.ename));
+    /* 有禁用时英雄池按意图排序:红方指向(克制值降序)在前 → 蓝方指向次之 → 无指向保持原序垫后 */
+    if (intentMap.size) {
+      const sig = list.filter(h => intentMap.get(h.ename));
+      const rest = list.filter(h => !intentMap.get(h.ename));
+      sig.sort((a, b) => {
+        const va = intentMap.get(a.ename), vb = intentMap.get(b.ename);
+        return (vb.red - va.red) || (vb.blue - va.blue);
+      });
+      list = [...sig, ...rest];
+    }
     if (!list.length) { pool.innerHTML = '<div class="empty">没有匹配的英雄</div>'; return; }
     pool.innerHTML = list.map(h => {
       const s = h.camp_stats;
@@ -535,9 +541,20 @@
       let stateCls = '';
       if (banB || banR) stateCls = 'is-banned ' + (banB && banR ? 'both' : banB ? 'by-blue' : 'by-red');
       else if (pickB || pickR) stateCls = 'is-picked ' + (pickB ? 'by-blue' : 'by-red');
+      /* 意图标注:该英雄被禁用来源克制 → 克制值徽章(悬停看来源明细) */
+      const iv = intentMap.get(h.ename);
+      let intentHtml = '';
+      if (iv) {
+        const tip = side => `克制值:${SIDE_NAME[side]}禁用的 ${iv.parts.filter(p => p.side === side)
+          .map(p => `${p.banName} 克制 ${h.cname} ${signed(p.param)}`).join('，')}；克制它的英雄已被禁用,对方可能想选`;
+        /* 双侧同时指向 → 红/蓝两个独立标签(红在前,与红值优先排序一致);单侧 → 单标签 */
+        if (iv.red > 0) intentHtml += `<span class="intent-val intent-red" title="${tip('red')}">${signed(iv.red)}</span>`;
+        if (iv.blue > 0) intentHtml += `<span class="intent-val intent-blue" title="${tip('blue')}">${signed(iv.blue)}</span>`;
+        if (intentHtml) intentHtml = `<span class="intent-badges">${intentHtml}</span>`;
+      }
       return `<div class="p-card ${used ? stateCls + ' locked' : ''}" data-id="${h.ename}"
         role="button" tabindex="0" aria-label="${st}" title="${h.cname} · ${h.hero_type_name || ''}${s ? ' · 胜率 ' + pct(s.winRate) : ''}">
-        <img loading="lazy" src="${h.camp_icon}" alt="${h.cname}">${tr}${badgesHtml(h.ename)}
+        <img loading="lazy" src="${h.camp_icon}" alt="${h.cname}">${tr}${badgesHtml(h.ename)}${intentHtml}
         <div class="pn">${h.cname}</div>
       </div>`;
     }).join('');
@@ -592,11 +609,11 @@
   /* ---------- 对方意图分析:禁用护核推断 ----------
      对方禁掉 B,B 克制 X 的证据取双向两榜(营地两榜为独立 top3,不可互推):
      ① X 的「被克制」榜含 B(bkzParam);② B 的「克制」榜含 X(kzParam)。
-     任一成立即 B 是 X 的天敌——禁它往往是为了护住想玩的 X;
-     候选得分 = 被移除对位优势之和(两榜同时命中则叠加),全量按分排序;
+     任一成立即 B 是 X 的天敌——禁它往往是为了护住想玩的 X。
+     计分规则:同一对 (B,X) 在两张榜同现时只计一次(取较大值,不重复累加);
+     多个被禁英雄克制同一英雄时,各取一次后求和作为候选得分,全量按分排序;
      已被禁/已选的英雄不参与。
      方向语义依据知识库 camp-relations-direction-semantics.md。 */
-  let intentSide = 'red';
   function bpIntent(bannedIds, excludeIds) {
     const out = [];
     for (const h of heroes) {
@@ -605,12 +622,12 @@
       let score = 0;
       const parts = [];
       for (const B of bannedIds) {
-        let p = 0;
         const b = bk && bk.find(e => e.bkzHeroId === B);
-        if (b && b.bkzParam > 0) p += b.bkzParam;
         const kzL = relations[B] && relations[B]['克制'] && relations[B]['克制'].list;
         const k = kzL && kzL.find(e => e.kzHeroId === h.ename);
-        if (k && k.kzParam > 0) p += k.kzParam;
+        /* 两榜同现 = 同一对克制关系,取较大值只计一次 */
+        const p = Math.max(b && b.bkzParam > 0 ? b.bkzParam : 0,
+                           k && k.kzParam > 0 ? k.kzParam : 0);
         if (p > 0) {
           score += p;
           parts.push({ banId: B, banName: (byId[B] || {}).cname || ('英雄' + B), param: p });
@@ -626,31 +643,24 @@
   }
   window.__bpIntent = bpIntent; /* 测试钩子 */
 
+  let intentMap = new Map(); /* 英雄 id -> {score, blue, red, parts},renderPool 据此标注卡片 */
   function renderIntent() {
-    const panel = document.getElementById('intent');
-    /* 任一方有禁用即显示面板:保证分析侧切换按钮始终可达 */
-    if (!slots.blue.ban.length && !slots.red.ban.length) { panel.hidden = true; return; }
-    const bans = slots[intentSide].ban;
-    let inner;
-    if (!bans.length) {
-      inner = `<div class="intent-note">${SIDE_NAME[intentSide]}暂无禁用。</div>`;
-    } else {
-      const exclude = new Set([...slots.blue.ban, ...slots.red.ban, ...slots.blue.pick, ...slots.red.pick]);
-      const cands = bpIntent(bans, exclude);
-      inner = cands.length
-        ? cands.map(c => {
-            const names = c.parts.map(p => p.banName).join('、');
-            const detail = c.parts.map(p => `${p.banName} 克制 ${c.name} ${signed(p.param)}`).join('，');
-            return `<div class="intent-row" title="营地口径对位优势:${detail}；克制它的英雄已被对方禁用,威胁移除">
-              <img src="${c.icon}" alt="${c.name}">
-              <div><div class="in">${c.name}</div><div class="ir">克制它的 ${names} 已被对方禁用</div></div>
-              <span class="is">${signed(c.score)}</span>
-            </div>`;
-          }).join('')
-        : '<div class="intent-note">对方禁用暂未指向明确的想选英雄。</div>';
+    /* 按侧分别评分后合并:徽章配色随指向侧(蓝/红/双侧渐变),数值为两侧求和 */
+    const exclude = new Set([...slots.blue.ban, ...slots.red.ban, ...slots.blue.pick, ...slots.red.pick]);
+    intentMap = new Map();
+    for (const side of ['blue', 'red']) {
+      const bans = slots[side].ban;
+      if (!bans.length) continue;
+      for (const c of bpIntent(bans, exclude)) {
+        const e = intentMap.get(c.id)
+          || { id: c.id, name: c.name, icon: c.icon, score: 0, blue: 0, red: 0, parts: [] };
+        e.score += c.score;
+        e[side] += c.score;
+        e.parts.push(...c.parts.map(p => ({ ...p, side })));
+        intentMap.set(c.id, e);
+      }
     }
-    document.getElementById('intentBody').innerHTML = inner;
-    panel.hidden = false;
+    document.getElementById('intentLegend').hidden = intentMap.size === 0;
   }
 
   /* ---------- 渲染 ---------- */
@@ -731,7 +741,7 @@
       startBtn.hidden = true;
     }
   }
-  function renderAll() { renderSlots(); renderTimeline(); renderTurn(); renderPool(); renderIntent(); }
+  function renderAll() { renderIntent(); renderSlots(); renderTimeline(); renderTurn(); renderPool(); }
 
   /* ---------- 顶栏操作 ---------- */
   document.getElementById('undoBtn').addEventListener('click', undo);
@@ -747,17 +757,6 @@
   }
   tgBlue.addEventListener('click', () => setBanSide('blue'));
   tgRed.addEventListener('click', () => setBanSide('red'));
-  /* 意图分析侧切换(默认分析红方) */
-  const intentRed = document.getElementById('intentRed');
-  const intentBlue = document.getElementById('intentBlue');
-  function setIntentSide(s) {
-    intentSide = s;
-    intentRed.classList.toggle('on', s === 'red');
-    intentBlue.classList.toggle('on', s === 'blue');
-    renderIntent();
-  }
-  intentRed.addEventListener('click', () => setIntentSide('red'));
-  intentBlue.addEventListener('click', () => setIntentSide('blue'));
   /* 先选方切换:仅禁用阶段可改,选人开始后隐藏锁定 */
   document.getElementById('fpBtn').addEventListener('click', () => {
     firstPick = firstPick === 'blue' ? 'red' : 'blue';
