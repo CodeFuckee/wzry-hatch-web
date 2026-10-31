@@ -319,6 +319,7 @@
 
 <div class="toolbar">
   <div class="chips" id="chips"></div>
+  <div class="chips" id="laneChips"></div>
   <md-outlined-text-field id="search" placeholder="搜索英雄名 / 称号" aria-label="搜索英雄名或称号">
     <md-icon slot="leading-icon">search</md-icon>
   </md-outlined-text-field>
@@ -349,7 +350,7 @@
 <div id="scrim"></div>
 <aside id="sheet" aria-label="英雄详情"></aside>
 
-<script src="data.js?v=1793412271"></script>
+<script src="data.js?v=1793487686"></script>
 <script type="module">
   import '@material/web/all.js';
   import '@material/web/select/outlined-select.js';
@@ -367,6 +368,9 @@
     return '—';
   })();
   const byId = {}; heroes.forEach(h => byId[h.ename] = h);
+  /* 分路解析(官方 herolist roles 字段;一英雄可有多分路) */
+  const LANES = { 1: '对抗路', 4: '发育路', 5: '游走', 3: '中路', 2: '打野' };
+  heroes.forEach(h => { h.lanes = String(h.roles || '').split('|').map(c => LANES[c]).filter(Boolean); });
 
   const subEl = document.getElementById('subTitle');
   subEl.innerHTML = `数据更新 ${dataFetchedAt || '—'} · <span id="heroCount"></span>`;
@@ -428,6 +432,21 @@
     chipsEl.appendChild(chip);
   });
   document.getElementById('search').addEventListener('input', e => { kw = e.target.value.trim(); render(); });
+  /* 分路筛选 chips */
+  let curLane = '全部分路';
+  const laneChipsEl = document.getElementById('laneChips');
+  ['全部分路', ...Object.values(LANES)].forEach(t => {
+    const chip = document.createElement('md-filter-chip');
+    chip.label = t;
+    if (t === '全部分路') chip.selected = true;
+    chip.addEventListener('click', () => {
+      curLane = t;
+      laneChipsEl.querySelectorAll('md-filter-chip').forEach(x => x.selected = false);
+      chip.selected = true;
+      render();
+    });
+    laneChipsEl.appendChild(chip);
+  });
   document.getElementById('sort').addEventListener('change', e => { curSort = e.target.value; render(); });
 
   /* ---------- 英雄关系查询 ---------- */
@@ -504,6 +523,7 @@
   function visibleHeroes() {
     let list = heroes.filter(h =>
       (curType === '全部' || (h.hero_type_name || '').includes(curType)) &&
+      (curLane === '全部分路' || h.lanes.includes(curLane)) &&
       (!kw || (h.cname || '').includes(kw) || (h.title || '').includes(kw)));
     if (curSort !== 'default') {
       const k = curSort;

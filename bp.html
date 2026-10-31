@@ -62,6 +62,7 @@
     --md-sys-color-outline: #74777F;
     --md-sys-color-outline-variant: #C4C6D0;
     --app-win: #146C2E;
+    --app-violet: #7C5CFC;
     --app-red: #B3261E;
     --app-blue: #0B57D0;
     --app-ease: cubic-bezier(0.2, 0, 0, 1);
@@ -270,10 +271,39 @@
   .intent-legend .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
   .intent-legend .dot.b { background: var(--app-blue); }
   .intent-legend .dot.r { background: var(--app-red); }
+  .intent-legend .dot.g { background: var(--app-win); }
+  .intent-legend .dot.v { background: var(--app-violet); }
+  .pool .p-card .counter-badges {
+    position: absolute; left: 4px; bottom: 25px; z-index: 2;
+    display: inline-flex; gap: 2px;
+  }
+  .pool .p-card .counter-val {
+    padding: 1px 5px; border-radius: 8px;
+    background: var(--app-win); color: #fff;
+    font-size: 10px; font-weight: 700; line-height: 1.4;
+  }
+  .pool .p-card .counter-picked {
+    padding: 1px 5px; border-radius: 8px;
+    background: var(--app-violet); color: #fff;
+    font-size: 10px; font-weight: 700; line-height: 1.4;
+  }
   .intent-legend[hidden] { display: none; }
 
+  /* 悬停英雄卡片:上方浮动显示可能分路 */
+  .lane-tip {
+    position: absolute; z-index: 5; transform: translateY(-100%);
+    padding: 3px 9px; border-radius: 8px; white-space: nowrap;
+    background: rgba(20, 22, 30, .88); color: #fff;
+    font-size: 11px; pointer-events: none;
+  }
+  .lane-tip[hidden] { display: none; }
+  .lane-gap { font-size: 12px; color: var(--md-sys-color-on-surface-variant); margin-top: 8px; }
+  .lane-gap .lg-b { color: var(--app-blue); font-weight: 600; }
+  .lane-gap .lg-r { color: var(--app-red); font-weight: 600; }
+  .lane-gap .lg-sep { margin: 0 8px; opacity: .5; }
+  .lane-gap[hidden] { display: none; }
   /* ===== 英雄池 ===== */
-  .pool-wrap { margin: 16px auto 40px; padding: 0 16px; }
+  .pool-wrap { position: relative; margin: 16px auto 40px; padding: 0 16px; }
   .pool-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   md-outlined-text-field#poolSearch { flex: 1 1 220px; max-width: 320px; --md-outlined-text-field-container-shape: 24px; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -295,31 +325,6 @@
   }
   .p-card:hover { outline: 2px solid var(--md-sys-color-primary); }
   .p-card:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
-  .p-card.locked { cursor: default; }
-  .p-card.is-banned img, .p-card.is-banned .pn,
-  .p-card.is-picked img, .p-card.is-picked .pn { opacity: .28; filter: grayscale(1); }
-  .p-card.is-banned::after, .p-card.is-picked::after {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -72%);
-    font-size: 34px; font-weight: 700;
-  }
-  /* 标记颜色随操作方:蓝方操作=蓝,红方操作=红,双方都禁=蓝→红渐变 */
-  .p-card.is-banned::after { content: '✕'; color: var(--app-red); }
-  .p-card.is-picked::after { content: '✓'; color: var(--app-win); }
-  .p-card.by-blue::after { color: var(--app-blue); }
-  .p-card.by-red::after { color: var(--app-red); }
-  .p-card.both.is-banned::after {
-    background: linear-gradient(105deg, var(--app-blue) 35%, var(--app-red) 65%);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-  }
-  .p-card .own {
-    position: absolute; top: 6px; z-index: 2;
-    width: 18px; height: 18px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 10px; font-weight: 700; color: #fff;
-  }
-  .own.b { background: var(--app-blue); right: 6px; }
-  .own.b.left { right: 27px; }
-  .own.r { background: var(--app-red); right: 6px; }
   .trank {
     position: absolute; top: 0; left: 0; z-index: 2;
     padding: 0 6px; border-radius: 0 0 8px 0; font-size: 10px; font-weight: 700;
@@ -379,6 +384,11 @@
     <div class="slots" id="blueBans"></div>
     <div class="grp-l"><span>选用（5）</span></div>
     <div class="slots" id="bluePicks"></div>
+    <div class="intent" id="intentBlue" hidden>
+      <div class="intent-h"><span class="ms">psychology</span><span>意图分析</span><span class="intent-sub">按该方禁用反推</span></div>
+      <div class="intent-graph-wrap" id="intentBodyBlue"></div>
+    </div>
+    <div class="lane-gap" id="laneGapBlue" hidden></div>
   </div>
 
   <div class="center">
@@ -403,28 +413,42 @@
     <div class="slots" id="redBans" style="justify-content:flex-end"></div>
     <div class="grp-l" style="justify-content:flex-end"><span>选用（5）</span></div>
     <div class="slots" id="redPicks" style="justify-content:flex-end"></div>
+    <div class="intent" id="intentRed" hidden>
+      <div class="intent-h"><span class="ms">psychology</span><span>意图分析</span><span class="intent-sub">按该方禁用反推</span></div>
+      <div class="intent-graph-wrap" id="intentBodyRed"></div>
+    </div>
+    <div class="lane-gap" id="laneGapRed" hidden></div>
   </div>
 </section>
 
 <section class="pool-wrap">
-  <div class="pool-bar">
+  <div class="pool-bar" id="poolBar">
     <md-outlined-text-field id="poolSearch" placeholder="搜索英雄 / 称号" aria-label="搜索英雄">
       <md-icon slot="leading-icon">search</md-icon>
     </md-outlined-text-field>
     <div class="chips" id="chips"></div>
+    <div class="chips lanes" id="laneChips"></div>
     <span class="intent-legend" id="intentLegend" hidden><span class="ms">psychology</span>已按对方禁用标注克制值
       <span class="dot b"></span>蓝方指向 <span class="dot r"></span>红方指向
+      <span class="dot g"></span>克制对方意图
+      <span class="dot v"></span>克制对方阵容
     </span>
   </div>
+  <div class="lane-tip" id="laneTip" hidden></div>
   <div class="pool" id="pool"></div>
 </section>
 
-<script src="data.js?v=1793012423"></script>
+<script src="data.js?v=1793487686"></script>
 <script type="module">
   import '@material/web/all.js';
 
   const { heroes, relations } = window.HERO_DATA;
   const byId = {}; heroes.forEach(h => byId[h.ename] = h);
+  /* 分路解析(官方 herolist roles 字段,数字码见 LANES;一英雄可有多分路) */
+  const LANES = { 1: '对抗路', 4: '发育路', 5: '游走', 3: '中路', 2: '打野' };
+  heroes.forEach(h => {
+    h.lanes = String(h.roles || '').split('|').map(c => LANES[c]).filter(Boolean);
+  });
 
   /* 顶栏数据版本 = 统计榜单版本(缺字段回退抓取时间) */
   const dataBuilt = window.HERO_DATA.dataFetchedAt || window.HERO_DATA.builtAt;
@@ -480,8 +504,21 @@
   const pickCount = () => slots.blue.pick.length + slots.red.pick.length;
 
   /* ---------- 英雄池筛选 ---------- */
-  let curType = '全部', kw = '';
+  let curType = '全部', curLane = '全部分路', kw = '';
   const chipsEl = document.getElementById('chips');
+  const laneChipsEl = document.getElementById('laneChips');
+  ['全部分路', ...Object.values(LANES)].forEach(t => {
+    const chip = document.createElement('md-filter-chip');
+    chip.label = t;
+    if (t === '全部分路') chip.selected = true;
+    chip.addEventListener('click', () => {
+      curLane = t;
+      laneChipsEl.querySelectorAll('md-filter-chip').forEach(x => x.selected = false);
+      chip.selected = true;
+      renderPool();
+    });
+    laneChipsEl.appendChild(chip);
+  });
   const types = ['全部', ...new Set(heroes.map(h => h.hero_type_name).filter(Boolean))];
   types.forEach(t => {
     const chip = document.createElement('md-filter-chip');
@@ -498,51 +535,79 @@
   document.getElementById('poolSearch').addEventListener('input', e => { kw = e.target.value.trim(); renderPool(); });
 
   function poolHeroes() {
+    const k = kw.toLowerCase();
     return heroes.filter(h =>
       (curType === '全部' || (h.hero_type_name || '').includes(curType)) &&
-      (!kw || (h.cname || '').includes(kw) || (h.title || '').includes(kw)));
+      (curLane === '全部分路' || h.lanes.includes(curLane)) &&
+      (!kw || (h.cname || '').includes(kw) || (h.title || '').includes(kw) ||
+        (h.py || '').includes(k)));
   }
 
-  function badgesHtml(id) {
-    const bs = [];
-    if (slots.blue.pick.includes(id)) bs.push('<span class="own b" title="蓝方选用">选</span>');
-    else if (slots.blue.ban.includes(id)) bs.push('<span class="own b' + (slots.red.ban.includes(id) ? ' left' : '') + '" title="蓝方禁用">禁</span>');
-    if (slots.red.pick.includes(id)) bs.push('<span class="own r" title="红方选用">选</span>');
-    else if (slots.red.ban.includes(id)) bs.push('<span class="own r" title="红方禁用">禁</span>');
-    return bs.join('');
-  }
-  const isBanned = id => slots.blue.ban.includes(id) || slots.red.ban.includes(id);
+
+  /* 悬停英雄卡片:上方浮动显示该英雄可能分路(官方 roles 数据) */
+  const poolEl = document.getElementById('pool');
+  const laneTip = document.getElementById('laneTip');
+  poolEl.addEventListener('mouseover', e => {
+    const card = e.target.closest('.p-card');
+    const h = card && byId[+card.dataset.id];
+    if (!h || !(h.lanes || []).length) { laneTip.hidden = true; return; }
+    laneTip.textContent = `可能分路：${h.lanes.join(' / ')}`;
+    laneTip.style.left = Math.max(0, card.offsetLeft) + 'px';
+    laneTip.style.top = Math.max(0, card.offsetTop - 26) + 'px';
+    laneTip.hidden = false;
+  });
+  poolEl.addEventListener('mouseleave', () => { laneTip.hidden = true; });
 
   function renderPool() {
-    const pool = document.getElementById('pool');
-    /* 被禁英雄不再出现在池中(禁用情况见上方两侧的禁用槽位);选用阶段的已选英雄保留(灰化打勾) */
-    let list = poolHeroes().filter(h => !isBanned(h.ename));
-    /* 有禁用时英雄池按意图排序:红方指向(克制值降序)在前 → 蓝方指向次之 → 无指向保持原序垫后 */
-    if (intentMap.size) {
-      const sig = list.filter(h => intentMap.get(h.ename));
-      const rest = list.filter(h => !intentMap.get(h.ename));
-      sig.sort((a, b) => {
-        const va = intentMap.get(a.ename), vb = intentMap.get(b.ename);
-        return (vb.red - va.red) || (vb.blue - va.blue);
-      });
-      list = [...sig, ...rest];
+    const pool = poolEl;
+    /* 被禁与已选的英雄都不再出现在池中(禁用/选用情况见上方两侧面板的槽位) */
+    let list = poolHeroes().filter(h => !inUse(h.ename));
+    /* 排序(选人阶段阵容已成型时,分路已被覆盖的英雄垫后并变淡):
+       未覆盖分路在前 → 克制对方阵容值降序 → 意图候选优先(按意图值) → 克制对方意图值 → 原序;
+       禁用阶段(无阵容)按:克制对方意图值降序 → 原序。 */
+    /* 分路已被阵容覆盖的英雄垫后并变淡;组内按信号与反制价值排序 */
+    const coveredLanes = new Set(
+      [...slots.blue.pick, ...slots.red.pick].flatMap(id => (byId[id] ? byId[id].lanes : [])));
+    const laneDup = h => (h.lanes || []).some(l => coveredLanes.has(l));
+    const poolKey = h => ({
+      cp: counterPickMap.get(h.ename) ? counterPickMap.get(h.ename).score : 0,
+      iv: intentMap.get(h.ename) ? intentMap.get(h.ename).score : 0,
+      ci: counterMap.get(h.ename) ? counterMap.get(h.ename).score : 0,
+      sig: !!(counterPickMap.get(h.ename) || counterMap.get(h.ename) || intentMap.get(h.ename)),
+    });
+    const poolCmp = (a, b) => {
+      const ra = poolKey(a), rb = poolKey(b);
+      if (rb.sig !== ra.sig) return rb.sig ? 1 : -1;              /* 有信号在前 */
+      if (rb.cp !== ra.cp) return rb.cp - ra.cp;                  /* 克制对方阵容 */
+      const di = rb.iv - ra.iv;                                    /* 意图候选优先于纯反制者 */
+      return di !== 0 ? di : rb.ci - ra.ci;                        /* 克制对方意图 */
+    };
+    /* 外层按「分路是否已被阵容覆盖」分两大组(未覆盖在前、已覆盖垫后变淡),
+       组内按信号与反制价值排序——保证已覆盖英雄连续垫后 */
+    const fresh = list.filter(h => !laneDup(h));
+    const dups = list.filter(h => laneDup(h));
+    if (intentMap.size || counterPickMap.size || coveredLanes.size) {
+      fresh.sort(poolCmp);
+      dups.sort(poolCmp);
     }
+    list = [...fresh, ...dups];
     if (!list.length) { pool.innerHTML = '<div class="empty">没有匹配的英雄</div>'; return; }
     pool.innerHTML = list.map(h => {
       const s = h.camp_stats;
       const tr = s && s.tRank ? `<span class="trank ${tClass(s.tRank)}">${s.tRank}</span>` : '';
-      const banB = slots.blue.ban.includes(h.ename), banR = slots.red.ban.includes(h.ename);
-      const pickB = slots.blue.pick.includes(h.ename), pickR = slots.red.pick.includes(h.ename);
-      const used = banB || banR || pickB || pickR;
-      const st = used
-        ? (banB || banR ? '已禁用 ' : '已选用 ') + h.cname
-        : (phase === 'ban' ? `禁用给${SIDE_NAME[banSide]} ` : '选用 ') + h.cname;
-      /* 状态类 + 归属方类:标记(✓/✕)颜色随操作方,双方都禁用渐变 */
-      let stateCls = '';
-      if (banB || banR) stateCls = 'is-banned ' + (banB && banR ? 'both' : banB ? 'by-blue' : 'by-red');
-      else if (pickB || pickR) stateCls = 'is-picked ' + (pickB ? 'by-blue' : 'by-red');
+      const st = (phase === 'ban' ? `禁用给${SIDE_NAME[banSide]} ` : '选用 ') + h.cname;
       /* 意图标注:该英雄被禁用来源克制 → 克制值徽章(悬停看来源明细) */
       const iv = intentMap.get(h.ename);
+      /* 反制标注:该英雄克制对方想选的英雄 → 绿色反制值徽章 */
+      const cv = counterMap.get(h.ename);
+      const cp = counterPickMap.get(h.ename);
+      const counterHtml = (cv || cp)
+        ? `<span class="counter-badges">${cv
+            ? `<span class="counter-val" title="反制:${cv.parts.map(p => `克制对方想选的 ${p.candName} ${signed(p.param)}`).join('，')}；合计反制值 ${signed(cv.score)}">${signed(cv.score)}</span>`
+            : ''}${cp
+            ? `<span class="counter-picked" title="克制对方阵容:${cp.parts.map(p => `克制 ${p.candName} ${signed(p.param)}`).join('，')}；合计 ${signed(cp.score)}">${signed(cp.score)}</span>`
+            : ''}</span>`
+        : '';
       let intentHtml = '';
       if (iv) {
         const tip = side => `克制值:${SIDE_NAME[side]}禁用的 ${iv.parts.filter(p => p.side === side)
@@ -552,9 +617,10 @@
         if (iv.blue > 0) intentHtml += `<span class="intent-val intent-blue" title="${tip('blue')}">${signed(iv.blue)}</span>`;
         if (intentHtml) intentHtml = `<span class="intent-badges">${intentHtml}</span>`;
       }
-      return `<div class="p-card ${used ? stateCls + ' locked' : ''}" data-id="${h.ename}"
+      const dup = laneDup(h) ? ' lane-dup' : '';
+      return `<div class="p-card${dup}" data-id="${h.ename}"
         role="button" tabindex="0" aria-label="${st}" title="${h.cname} · ${h.hero_type_name || ''}${s ? ' · 胜率 ' + pct(s.winRate) : ''}">
-        <img loading="lazy" src="${h.camp_icon}" alt="${h.cname}">${tr}${badgesHtml(h.ename)}${intentHtml}
+        <img loading="lazy" src="${h.camp_icon}" alt="${h.cname}">${tr}${intentHtml}${counterHtml}
         <div class="pn">${h.cname}</div>
       </div>`;
     }).join('');
@@ -643,6 +709,47 @@
   }
   window.__bpIntent = bpIntent; /* 测试钩子 */
 
+  /* ---------- 反制打分:克制对方意图候选的英雄按克制值赋分 ----------
+     对方意图候选(想选的英雄)确定后,我方英雄 P 对候选 X 的克制值取双向较大值
+     (X 的「被克制」榜含 P,或 P 的「克制」榜含 X;同对关系两榜同现只计一次);
+     克制多个候选时求和。用于提示"该选谁去反制对方的意图"。 */
+  let counterMap = new Map();      /* 英雄 id -> {score, parts},克制意图候选(绿) */
+  let counterPickMap = new Map();  /* 英雄 id -> {score, parts},克制对方已选阵容(紫) */
+  function bpCounter(candIds, excludeIds, intentScores) {
+    /* intentScores: Map(候选id -> 意图值);意图值越大,对方越可能选,反制该候选的价值越高 */
+    const out = [];
+    for (const h of heroes) {
+      if (excludeIds.has(h.ename)) continue;
+      let score = 0;
+      const parts = [];
+      for (const X of candIds) {
+        const xName = (byId[X] || {}).cname || ('英雄' + X);
+        const kzL = relations[h.ename] && relations[h.ename]['克制'] && relations[h.ename]['克制'].list;
+        const bk = relations[X] && relations[X]['被克制'] && relations[X]['被克制'].list;
+        const k = kzL && kzL.find(e => String(e.kzHeroId) === String(X));
+        const b = bk && bk.find(e => String(e.bkzHeroId) === String(h.ename));
+        const counter = Math.max(k && k.kzParam > 0 ? k.kzParam : 0,
+                                 b && b.bkzParam > 0 ? b.bkzParam : 0);
+        const intent = intentScores ? (Number(intentScores.get(String(X))) || 0) : 0;
+        if (counter > 0) {
+          const v = counter + intent;
+          score += v;
+          parts.push({ candId: X, candName: xName, param: v, counter, intent });
+        }
+      }
+      if (score > 0) {
+        parts.sort((a, b) => b.param - a.param);
+        out.push({ id: h.ename, name: h.cname, icon: h.camp_icon, score, parts });
+      }
+    }
+    out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'zh'));
+    return out;
+  }
+  window.__bpCounter = bpCounter; /* 测试钩子 */
+  window.__bpState = () => ({ phase,
+    blueBan: [...slots.blue.ban], redBan: [...slots.red.ban],
+    bluePick: [...slots.blue.pick], redPick: [...slots.red.pick] }); /* 测试钩子 */
+
   let intentMap = new Map(); /* 英雄 id -> {score, blue, red, parts},renderPool 据此标注卡片 */
   function renderIntent() {
     /* 按侧分别评分后合并:徽章配色随指向侧(蓝/红/双侧渐变),数值为两侧求和 */
@@ -661,6 +768,18 @@
       }
     }
     document.getElementById('intentLegend').hidden = intentMap.size === 0;
+    /* 反制打分:克制意图候选的英雄赋分(排除已被禁/已选),分值含候选意图值 */
+    counterMap = new Map();
+    if (intentMap.size) {
+      const intentScores = new Map([...intentMap].map(([id, e]) => [String(id), e.score]));
+      for (const c of bpCounter([...intentMap.keys()], exclude, intentScores)) counterMap.set(c.id, c);
+    }
+    /* 克制对方已选阵容:对方选用的英雄即明确的目标,克制它们的英雄按克制值赋分 */
+    counterPickMap = new Map();
+    const picked = [...slots.blue.pick, ...slots.red.pick];
+    if (picked.length) {
+      for (const c of bpCounter(picked, exclude)) counterPickMap.set(c.id, c);
+    }
   }
 
   /* ---------- 渲染 ---------- */
@@ -741,7 +860,23 @@
       startBtn.hidden = true;
     }
   }
-  function renderAll() { renderIntent(); renderSlots(); renderTimeline(); renderTurn(); renderPool(); }
+  const STANDARD_LANES = ['对抗路', '中路', '发育路', '游走', '打野'];
+  function renderLaneGap() {
+    const pickPhase = phase === 'pick';
+    for (const side of ['blue', 'red']) {
+      const el = document.getElementById('laneGap' + (side === 'blue' ? 'Blue' : 'Red'));
+      if (!pickPhase) { el.hidden = true; continue; }
+      const covered = new Set(slots[side].pick.flatMap(id => (byId[id] ? byId[id].lanes : [])));
+      const lack = STANDARD_LANES.filter(l => !covered.has(l));
+      el.innerHTML = lack.length
+        ? `欠缺 <b>${lack.join('/')}</b>`
+        : `分路已齐 <b>✓</b>`;
+      el.hidden = false;
+      el.classList.toggle('lg-blue', side === 'blue');
+      el.classList.toggle('lg-red', side === 'red');
+    }
+  }
+  function renderAll() { renderIntent(); renderSlots(); renderTimeline(); renderTurn(); renderLaneGap(); renderPool(); }
 
   /* ---------- 顶栏操作 ---------- */
   document.getElementById('undoBtn').addEventListener('click', undo);
