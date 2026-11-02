@@ -1078,7 +1078,8 @@
      已选位显示皮肤原画,可能认错——结果仅供逐槽确认修正。 */
   const IMP = {
     floor: 0.6, margin: 0.05, topN: 5,
-    jitters: [[0, 0], [-0.008, 0], [0.008, 0], [0, -0.008], [0, 0.008]],
+    /* 幅度需小(±0.004):偏移窗会让同色调干扰英雄捞到虚高分 */
+    jitters: [[0, 0], [-0.004, 0], [0.004, 0]],
     zooms: [[1.0, 0.5], [0.8, 0.5], [0.8, 0.42], [0.62, 0.5], [0.62, 0.42]],
   };
   const FEAT = 32, BLK = 8;
@@ -1121,6 +1122,61 @@
     return { z, b };
   }
 
+  function impHogFeat(src, sx, sy, sw, sh) {
+    /* HOG 特征(64x64 灰度、9bin 无符号方向梯度直方图、8x8 cell、L2 归一,576 维)
+       与 Python hog_feat 一致:梯度结构对渲染风格/颜色不敏感,与 z 色彩特征互补 */
+    const S = 64;
+    const c = document.createElement('canvas'); c.width = S; c.height = S;
+    const cx = c.getContext('2d', { willReadFrequently: true });
+    cx.imageSmoothingEnabled = true;
+    cx.imageSmoothingQuality = 'high';
+    /* 多级减半降采样:一步大缩小会产生混叠伪影,摧毁梯度结构。
+       先裁到窗口的独立画布,再逐级减半至目标。 */
+    let cur = document.createElement('canvas');
+    cur.width = Math.max(1, Math.round(sw)); cur.height = Math.max(1, Math.round(sh));
+    let curCtx = cur.getContext('2d');
+    curCtx.drawImage(src, sx, sy, sw, sh, 0, 0, cur.width, cur.height);
+    while (cur.width > S * 2 && cur.height > S * 2) {
+      const nxt = document.createElement('canvas');
+      nxt.width = Math.max(S, (cur.width / 2) | 0);
+      nxt.height = Math.max(S, (cur.height / 2) | 0);
+      const nx = nxt.getContext('2d');
+      nx.imageSmoothingEnabled = true;
+      nx.imageSmoothingQuality = 'high';
+      nx.drawImage(cur, 0, 0, cur.width, cur.height, 0, 0, nxt.width, nxt.height);
+      cur = nxt; curCtx = nx;
+    }
+    cx.drawImage(cur, 0, 0, cur.width, cur.height, 0, 0, S, S);
+    const d = cx.getImageData(0, 0, S, S).data;
+    const g = new Float32Array(S * S);
+    for (let i = 0; i < S * S; i++) g[i] = d[i*4] * 0.299 + d[i*4+1] * 0.587 + d[i*4+2] * 0.114;
+    /* 与 Python np.gradient 一致:内部点中心差分/2,边界点单侧差分 */
+    const gx = new Float32Array(S * S), gy = new Float32Array(S * S);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      /* 与 Python np.gradient 一致:内部点中心差分/2,边界点单侧差分 */
+      if (x === 0) gx[y * S] = g[y * S + 1] - g[y * S];
+      else if (x === S - 1) gx[y * S] = g[y * S + S - 1] - g[y * S + S - 2];
+      else gx[y * S] = (g[y * S + 1] - g[y * S - 1]) / 2;
+      if (y === 0) gy[y * S] = g[(y + 1) * S + x] - g[y * S + x];
+      else if (y === S - 1) gy[y * S] = g[y * S + x] - g[(y - 1) * S + x];
+      else gy[y * S] = (g[(y + 1) * S + x] - g[(y - 1) * S + x]) / 2;
+    }
+    const out = new Float32Array(8 * 8 * 9);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const mag = Math.hypot(gx[y * S + x], gy[y * S + x]);
+      let ang = Math.atan2(gy[y * S + x], gx[y * S + x]) * 180 / Math.PI;
+      if (ang < 0) ang += 180;
+      const b = Math.min(8, (ang / 20) | 0);
+      out[((y >> 3) * 8 + (x >> 3)) * 9 + b] += mag;
+    }
+    let n = 0;
+    for (let k = 0; k < out.length; k++) n += out[k] * out[k];
+    n = Math.sqrt(n) + 1e-6;  /* 加法式兜底:sqrt 下溢的 truthy 微值会让特征爆炸成 Inf */
+    for (let k = 0; k < out.length; k++) out[k] /= n;
+    return out;
+  }
+  function normOf(a) { let s = 0; for (let k = 0; k < a.length; k++) s += a[k] * a[k]; return Math.sqrt(s) + 1e-9; }
+
   function impLoadImg(src) {
     return new Promise((ok, err) => {
       const im = new Image();
@@ -1130,7 +1186,7 @@
     });
   }
 
-  const impDB = { names: [], Z: null, B: null, NZ: null, NB: null, emptyZ: null, emptyB: null, ready: false };
+  const impDB = { names: [], Z: null, B: null, H: null, NZ: null, NB: null, NH: null, emptyVars: [], ready: false };
   async function impBuildDB() {
     if (impDB.ready) return;
     const feats = [];
@@ -1172,13 +1228,39 @@
       impDB.NZ[vi] = norm(impDB.Z, FEAT * FEAT * 3, vi * FEAT * FEAT * 3);
       impDB.NB[vi] = norm(impDB.B, 48, vi * 48);
     }
+    /* HOG 参考特征:构建期 Python 预计算(web/gen_hog_refs.py,int8 量化)。
+       JS 端自算 HOG 与 Python 存在无法完全对齐的实现差异(canvas 缩放/梯度
+       边界),导致判别力下降——参考特征与 CLI 同源后只剩查询端的微小差异。 */
+    try {
+      const buf = new Uint8Array(await (await fetch('assets/hog_refs.bin')).arrayBuffer());
+      const metaLen = new DataView(buf.buffer, buf.byteOffset, 4).getUint32(0, true);
+      const meta = JSON.parse(new TextDecoder().decode(buf.slice(4, 4 + metaLen)));
+      const dataStart = 4 + metaLen;
+      if (meta.names.length * meta.dim !== buf.length - dataStart) throw new Error('hog_refs 尺寸不符');
+      impDB.hogNames = meta.names;
+      impDB.H = new Float32Array(meta.names.length * meta.dim);
+      impDB.NH = new Float32Array(meta.names.length);
+      for (let vi = 0; vi < meta.names.length; vi++) {
+        const sc = (meta.scales[vi] || 0) / 127;
+        let nn = 0;
+        for (let k = 0; k < meta.dim; k++) {
+          impDB.H[vi * meta.dim + k] = buf[dataStart + vi * meta.dim + k] * sc;
+          nn += impDB.H[vi * meta.dim + k] ** 2;
+        }
+        impDB.NH[vi] = Math.sqrt(nn) + 1e-9;
+      }
+    } catch (e) { /* hog_refs 缺失:HOG 通道禁用,退回 z 单通道 */ }
     try {
       const im = await impLoadImg('assets/bp_empty_ban.jpg');
       const cv = document.createElement('canvas');
       cv.width = im.naturalWidth; cv.height = im.naturalHeight;
       cv.getContext('2d').drawImage(im, 0, 0);
       const f = impFeat(cv, 0, 0, cv.width, cv.height);
-      impDB.emptyZ = f.z; impDB.emptyB = f.b;
+      /* 占位符模板多取景变体(与英雄变体同款 zoom 系统) */
+      impDB.emptyVars = IMP.zooms.map(([side2, vcy2]) => {
+        const s2 = side2 * cv.width, cx2 = cv.width / 2, cy2 = vcy2 * cv.width;
+        return impFeat(cv, cx2 - s2 / 2, cy2 - s2 / 2, s2, s2);
+      });
     } catch (e) { /* 占位符模板缺失:仅按分数阈值判空 */ }
     impDB.ready = true;
   }
@@ -1234,23 +1316,52 @@
   }
 
   function impEmptyScore(f) {
-    if (!impDB.emptyZ) return null;
-    const norm = (a) => { let s = 0; for (let k = 0; k < a.length; k++) s += a[k] * a[k]; return Math.sqrt(s) || 1e-9; };
-    const az = new Float32Array(f.z.length), ab = new Float32Array(f.b.length);
-    for (let y = 0; y < FEAT; y++) for (let x = 0; x < FEAT; x++) {
-      const w = discW[y * FEAT + x];
-      for (let c = 0; c < 3; c++) az[(y * FEAT + x) * 3 + c] = f.z[(y * FEAT + x) * 3 + c] * w;
+    /* 占位符模板多取景变体取最优(与 Python empty_score 一致) */
+    if (!impDB.emptyVars || !impDB.emptyVars.length) return null;
+    let best = -1;
+    for (const { z: ez, b: eb } of impDB.emptyVars) {
+      let dz = 0, dd = 0, nz = 0, nb = 0;
+      for (let k = 0; k < 16; k++) {
+        const w = discBlk[k];
+        for (let c = 0; c < 3; c++) {
+          const bv = f.b[k * 3 + c] * w;
+          dd += bv * eb[k * 3 + c]; nb += bv * bv;
+        }
+      }
+      const off = 0;
+      for (let i = 0; i < FEAT * FEAT; i++) {
+        const w = discW[i];
+        for (let c = 0; c < 3; c++) {
+          const zv = f.z[i * 3 + c] * w;
+          dz += zv * ez[i * 3 + c]; nz += zv * zv;
+        }
+      }
+      nz = Math.sqrt(nz) || 1e-9; nb = Math.sqrt(nb) || 1e-9;
+      best = Math.max(best, 0.5 * dz / (normOf(ez) * nz) + 0.5 * dd / (normOf(eb) * nb));
     }
-    for (let k = 0; k < 16; k++) for (let c = 0; c < 3; c++) ab[k * 3 + c] = f.b[k * 3 + c] * discBlk[k];
-    const ez = new Float32Array(impDB.emptyZ.length), eb = new Float32Array(impDB.emptyB.length);
-    for (let y = 0; y < FEAT; y++) for (let x = 0; x < FEAT; x++) {
-      const w = discW[y * FEAT + x];
-      for (let c = 0; c < 3; c++) ez[(y * FEAT + x) * 3 + c] = impDB.emptyZ[(y * FEAT + x) * 3 + c] * w;
+    return best;
+  }
+  function impHogScores(f) {
+    /* 槽 HOG 特征 vs 库(V*N 条目)的余弦;返回 Float32Array(V*N) */
+    const V = IMP.zooms.length, N = impDB.names.length, dim = 576;
+    const fh = f.h, nf = Math.sqrt((() => { let s = 0; for (let k = 0; k < fh.length; k++) s += fh[k] * fh[k]; return s; })()) || 1e-9;
+    const out = new Float32Array(V * N);
+    for (let vi = 0; vi < V * N; vi++) {
+      let d = 0;
+      const off = vi * dim;
+      for (let k = 0; k < dim; k++) d += fh[k] * impDB.H[off + k];
+      out[vi] = d / (impDB.NH[vi] * nf);
     }
-    for (let k = 0; k < 16; k++) for (let c = 0; c < 3; c++) eb[k * 3 + c] = impDB.emptyB[k * 3 + c] * discBlk[k];
-    const s1 = az.reduce((s, v, i) => s + v * ez[i], 0) / (norm(az) * norm(ez));
-    const s2 = ab.reduce((s, v, i) => s + v * eb[i], 0) / (norm(ab) * norm(eb));
-    return 0.5 * s1 + 0.5 * s2;
+    return out;
+  }
+
+  function minmaxPer(per) {
+    let lo = Infinity, hi = -Infinity;
+    for (const e in per) { lo = Math.min(lo, per[e]); hi = Math.max(hi, per[e]); }
+    const r = (hi - lo) || 1e-9;
+    const out = {};
+    for (const e in per) out[e] = (per[e] - lo) / r;
+    return out;
   }
 
   function impSlotBoxes(W, H) {
@@ -1291,8 +1402,9 @@
         for (const [jx, jy] of IMP.jitters) {
           let sx, sy, sw, sh;
           if (phase === 'ban') {
-            const cx = box.cx + jx * H, cy = box.cy + jy * H, hw = 0.68 * box.r;
-            sx = cx - hw; sy = cy - 0.80 * box.r; sw = 2 * hw; sh = 1.36 * box.r;
+            const cx = box.cx + jx * H, cy = box.cy + jy * H - 0.12 * box.r;
+            const half = 0.85 * box.r;
+            sx = cx - half; sy = cy - half; sw = 2 * half; sh = 2 * half;
           } else {
             sx = box.x + 0.085 * box.s + jx * H; sy = box.y + 0.055 * box.s + jy * H;
             sw = 0.75 * box.s; sh = 0.75 * box.s;
@@ -1323,9 +1435,11 @@
           c2.getContext('2d').drawImage(cv, sx2, sy2, sw2, sw2, 0, 0, 96, 96);
           crop = c2.toDataURL('image/jpeg', 0.85);
         }
-        slots.push(empty
-          ? { empty: true, ename: null, score: 0, top: [], crop }
-          : { empty: false, ename: bestTop[0].ename, score: bestTop[0].score, top: bestTop, crop });
+        if (bestTop && !empty) {
+          slots.push({ empty: false, ename: bestTop[0].ename, score: bestTop[0].score, top: bestTop, crop });
+        } else {
+          slots.push({ empty: true, ename: null, score: 0, top: [], crop });
+        }
         onProgress && onProgress(++done, 20);
         await new Promise(r => setTimeout(r, 0));
       }
@@ -1434,7 +1548,7 @@
       shotImportBtn.hidden = false;
       if (importState.meta.warnings.length) showErr('⚠ ' + importState.meta.warnings.join('；'));
     } catch (e) {
-      showErr(e.message || String(e));
+      showErr((e && e.stack || e.message || String(e)));
     }
   }
 
