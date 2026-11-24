@@ -554,6 +554,13 @@
   .vid-stage-tabs .vt .ms { font-size: 15px; }
   #vidPlayer { width: 100%; max-height: 56vh; border-radius: 14px; background: #000; display: block; }
   #vidPlayer[hidden] { display: none !important; }
+  .vid-stage { position: relative; }
+  /* 实时识别位置叠加层:盖在视频画面上(不挡控制条,pointer-events 放行) */
+  #vidWatchCv { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+  .vid-fp-txt { font-size: 14px; font-weight: 700; }
+  .vid-fp-txt .vid-fp-src { font-weight: 400; color: var(--md-sys-color-on-surface-variant); font-size: 12px; }
+  .vid-fp-txt.b { color: #4f8ef7; }
+  .vid-fp-txt.r { color: #f75e5e; }
   .vid-frame-wrap { text-align: center; cursor: pointer; }
   .vid-frame-wrap[hidden] { display: none; }
   #vidFrameImg { max-width: 100%; max-height: 52vh; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,.18); }
@@ -706,7 +713,7 @@
   <div class="pool" id="pool"></div>
 </section>
 
-<script src="data.js?v=1793833293"></script>
+<script src="data.js?v=1795474909"></script>
 <script defer src="./vendor/heic-to/heic-to.js"></script>
 <script type="module">
   import '@material/web/all.js';
@@ -1015,7 +1022,7 @@
     return out;
   }
   window.__bpCounter = bpCounter; /* 测试钩子 */
-  window.__bpState = () => ({ phase,
+  window.__bpState = () => ({ phase, firstPick,
     blueBan: [...slots.blue.ban], redBan: [...slots.red.ban],
     bluePick: [...slots.blue.pick], redPick: [...slots.red.pick] }); /* 测试钩子 */
 
@@ -1728,20 +1735,22 @@
 
   /* 在已绘制底图的画布上标出 20 个槽位框(虚线=空槽,hlKey 高亮加强)。
      截图位置图与视频位置图共用;state 为识别板(importState 形状)。 */
-  function paintSlotBoxes(cv, state, hlKey) {
-    const ctx = cv.getContext('2d');
-    const boxes = impSlotBoxes(cv.width, cv.height);
-    const fs = Math.max(14, Math.round(cv.width * 0.024));
+  /* 在画布上下文上按帧分辨率画 20 个槽位框,三态:
+     hl(步序窗口)=白色加亮(当前正在进行选人);已填槽=实线阵营色(确定英雄);
+     空槽=虚线弱化(还未选人)。hlKey 可为单 key 或 key 集合 */
+  function paintSlotBoxes(ctx, W, H, state, hlKey) {
+    const boxes = impSlotBoxes(W, H);
+    const fs = Math.max(14, Math.round(W * 0.024));
     ctx.font = `bold ${fs}px system-ui, sans-serif`;
     ctx.textBaseline = 'bottom';
-    ctx.lineWidth = Math.max(4, Math.round(cv.width * 0.006));
+    ctx.lineWidth = Math.max(4, Math.round(W * 0.006));
     for (const [side, phase] of [['blue', 'ban'], ['red', 'ban'], ['blue', 'pick'], ['red', 'pick']]) {
       const color = MAP_COLORS[side];
       const zh = (side === 'blue' ? '蓝' : '红') + (phase === 'ban' ? '禁' : '选');
       for (let i = 0; i < 5; i++) {
         const s = state[side][phase][i];
         const key = `${side}-${phase}-${i}`;
-        const hl = hlKey === key;
+        const hl = key === hlKey || (hlKey && typeof hlKey !== 'string' && hlKey.has && hlKey.has(key));
         let x, y, w, h, round = false;
         if (phase === 'ban') {
           const { cx, cy: cy2, r } = boxes[side === 'blue' ? 'banBlue' : 'banRed'][i];
@@ -1750,19 +1759,19 @@
           ({ x, y, w } = boxes[side === 'blue' ? 'pickBlue' : 'pickRed'][i]); h = w;
         }
         ctx.setLineDash(s.empty ? [fs * 0.35, fs * 0.25] : []);
-        /* 常驻半透明底色让框区域从原图中"浮出",悬停对应卡片时加强 */
+        /* 常驻半透明底色让框区域从原图中"浮出":窗口槽加亮 */
         ctx.fillStyle = hl ? 'rgba(255,255,255,.34)' : 'rgba(255,255,255,.16)';
         if (round) {
           ctx.beginPath();
           ctx.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2);
           ctx.fill();
-          ctx.strokeStyle = color;
-          ctx.lineWidth = Math.max(4, cv.width * (hl ? 0.007 : 0.005));
+        ctx.strokeStyle = color;
+          ctx.lineWidth = Math.max(4, W * (hl ? 0.007 : 0.005));
           ctx.stroke();
         } else {
           ctx.fillRect(x, y, w, h);
-          ctx.strokeStyle = color;
-          ctx.lineWidth = Math.max(4, cv.width * (hl ? 0.007 : 0.005));
+        ctx.strokeStyle = color;
+          ctx.lineWidth = Math.max(4, W * (hl ? 0.007 : 0.005));
           ctx.strokeRect(x, y, w, h);
         }
         ctx.setLineDash([]);
@@ -1773,7 +1782,9 @@
         ctx.strokeStyle = 'rgba(0,0,0,.75)';
         ctx.strokeText(label, x, ty);
         ctx.fillStyle = hl ? '#FFFFFF' : color;
+        if (!hl && s.empty) ctx.globalAlpha = 0.55;   /* 还未选人:标签弱化 */
         ctx.fillText(label, x, ty);
+        ctx.globalAlpha = 1;
       }
     }
   }
@@ -1785,7 +1796,7 @@
     const cv = shotSlotMap;
     cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
     cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-    paintSlotBoxes(cv, importState, impMapHighlight);
+    paintSlotBoxes(cv.getContext('2d'), cv.width, cv.height, importState, impMapHighlight);
   }
 
   /* 位置图点击:落在槽位上 → 打开候选菜单;空白处 → 新标签查看大图 */
@@ -1847,10 +1858,12 @@
   document.addEventListener('click', closeImpMenu);
 
   /* 把一份识别板(截图或视频解析结果)写入模拟器:禁用逐槽、选人按行序分配
-     1-2-2-2-2-1 步序,悔一手可逐步回退。 */
-  function applyState(state, dlg) {
+     1-2-2-2-2-1 步序,悔一手可逐步回退。fpSide = 识别出的先选方(视频导入传入;
+     截图导入无此信息,保持默认蓝)。 */
+  function applyState(state, dlg, fpSide) {
     if (!state) return;
     reset();
+    if (fpSide === 'blue' || fpSide === 'red') firstPick = fpSide;
     const push = (side, action, id) => { slots[side][action].push(id); ops.push({ side, action, id }); };
     for (const side of ['blue', 'red'])
       for (const s of state[side].ban) if (!s.empty && s.ename) push(side, 'ban', s.ename);
@@ -1896,9 +1909,12 @@
      与截图导入同一套识别引擎(impSlot),按视频播放速度实时解析(模拟游戏进行中):
      播放驱动采样(rAF 泵,每 VID.dt 秒一个采样边界)→ 逐槽 24x24 灰度裁剪差
      变化检测 → 只对变化槽跑完整识别 → 时间轴状态机记录「何时选了谁」
-     (悬停换英雄),事件确认即刷新时间轴/阵容/选人建议。两条不变式保证正确性:
+     (悬停换英雄),事件确认即刷新时间轴/阵容/选人建议。三条不变式保证正确性:
      ① BP 槽永不回退——转场/loading 垃圾帧判空直接忽略;
-     ② 待定前置——变化须在下一采样帧仍稳定才记事件,闪烁帧回原态即丢弃。
+     ② 待定前置——变化须在下一采样帧仍稳定才记事件,闪烁帧回原态即丢弃;
+     ③ 选序门控——按 1-2-2-2-2-1 选人顺序确认(先选方自举),对方回合窗口内
+        己方步序未开始的槽不确认(浏览预览不抢跑),己方回合窗口内任意己方槽
+        可确认(帮抢:先手替队友抢,英雄落在被帮队友的槽;锁定以 A 分数门槛为准)。
      识别次数 ≈ 20 + 变化数;暂停/拖动/跳转自适应(seek 后重定标)。 */
 
   /* 纯逻辑时间轴状态机(无 DOM):视频循环与单测(window.__vidBPSession)共用 */
@@ -1909,6 +1925,37 @@
     const fillLog = [];   /* seek 跳段补读日志(同上) */
     const stats = { samples: 0, recognitions: 0 };
     let begun = false;
+    /* 选序门控(D):步序 = 1-2-2-2-2-1,先选方由首个选人确认自举。bootBase 已废除
+       ——基线预选预览计数会毒化步序(预览被当已选,步序超前,交叉错序)。
+       槽位区域不按窗口过滤(真实房间帮抢/锁序不按槽号序,窗口游标会卡死漂移),
+       watchSet 仅作展示(视频叠加层高亮当前步序窗口)。 */
+    let firstPick = null, graceKey = null, tLastConfirm = null;
+    const draftSteps = fp => { const b = fp === 'blue' ? 'red' : 'blue';
+      return [fp, b, b, fp, fp, b, b, fp, fp, b]; };
+    const draftStepIdx = (side, i) => {
+      const st = draftSteps(firstPick || 'blue'); let n = 0;
+      for (let k = 0; k < st.length; k++) if (st[k] === side && n++ === i) return k;
+      return st.length;
+    };
+    /* 步序游标 = 已确认的选人「槽位」数(按槽去重:悬停换英雄同一槽两条事件只算
+       一手,不重复推进步序)。基线预选预览不入此数(槽未被确认)。 */
+    const draftCnt = () => {
+      const seen = new Set();
+      for (const e of events) if (e.phase === 'pick') seen.add(e.side + '-' + e.idx);
+      return seen.size;
+    };
+    /* 对方回合窗口内,己方步序未开始的槽不确认(浏览预览不抢跑);
+       己方回合窗口内,己方任意槽可确认(帮抢:先手替队友抢,英雄落被帮槽);
+       先选方未定(自举期)信任 A 分数门槛——首个过门槛的稳定确认即先选方首手。 */
+    const draftGateOk = (side, kind, i) => {
+      if (kind !== 'pick' || !firstPick) return true;
+      const st = draftSteps(firstPick), cnt = Math.min(draftCnt(), st.length);
+      return cnt >= draftStepIdx(side, i) || st[cnt] === side;
+    };
+    /* 步序 k 对应的槽位序号 = 该方在 st[0..k] 中的出现次数-1(第 occ 次出现 → 槽 occ-1) */
+    const slotOfStep = (st, k) => { let n = 0;
+      for (let j = 0; j <= k; j++) if (st[j] === st[k]) n++;
+      return n - 1; };
     const key = (side, kind, i) => `${side}-${kind}-${i}`;
     const S = {};
     S.begin = (t, board) => {
@@ -1920,6 +1967,37 @@
           slot: rec && !rec.empty ? { ...rec } : { empty: true, ename: null, score: 0 },
           pending: null,
         };
+      }
+    };
+    /* 当前步序窗口(展示用:叠加层白字="游戏当前正在选的槽位")——按**时间推算**:
+       每手平均时长 VID.winPerPick,锚点=最近一次确认(每次确认重新对表,识别受阻时
+       窗口仍随视频时间前进,不冻在受阻槽位上)。自举期(先选方未定)同盯蓝1/红1。
+       确认门控(D)仍按已确认槽数计数,与此展示窗口独立。 */
+    S.watchWindow = t => {
+      const set = new Set();
+      const st = draftSteps(firstPick || 'blue');
+      if (!firstPick) { set.add(key('blue', 'pick', 0)); set.add(key('red', 'pick', 0)); return set; }
+      if (t == null) t = tLastConfirm == null ? 0 : tLastConfirm;
+      const pos = Math.min(draftCnt() + Math.floor(Math.max(0, t - tLastConfirm) / VID.winPerPick), st.length - 1);
+      set.add(key(st[pos], 'pick', slotOfStep(st, pos)));
+      if (pos + 1 < st.length && st[pos + 1] === st[pos]) set.add(key(st[pos], 'pick', slotOfStep(st, pos + 1)));
+      return set;
+    };
+    /* watchSet = 步序窗口 ∪ 最近确认槽(grace) ∪ 带待定槽 */
+    S.watchSet = t => {
+      const set = S.watchWindow(t);
+      if (graceKey) set.add(graceKey);   /* 最近确认槽:窗口关闭后的悬停变化仍可捕获 */
+      for (const kk in slots) if (slots[kk].pending && kk.includes('-pick-')) set.add(kk);
+      return set;
+    };
+    /* 终局全板兜底扫描:窗口滞塞跳过/从未被窗口覆盖的空槽按当前帧真值补进板
+       (不记时间轴事件,记 fillLog 供回放重演);待定槽留给 flush 正常确认。 */
+    S.sweep = (t, fn) => {
+      for (const side of SIDES) for (const kind of KINDS) for (let i = 0; i < 5; i++) {
+        const st = slots[key(side, kind, i)];
+        if (st && st.hero == null && !st.pending) {
+          try { S.fill(t, side, kind, i, fn(side, kind, i)); } catch (e) { /* 单槽识别失败跳过 */ }
+        }
       }
     };
     S.update = (t, side, kind, i, rec) => {
@@ -1942,6 +2020,11 @@
       st.slot = { empty: false, ename: st.hero, score: st.pending.score,
                   top: st.pending.slot.top || [], crop: st.pending.slot.crop || null };
       st.pending = null;
+      if (kind === 'pick') {
+        graceKey = key(side, kind, i);   /* 最近确认槽保持被盯:窗口关闭后的悬停变化仍可捕获 */
+        if (!firstPick) { firstPick = side; firstPickSrc = 'bootstrap'; }   /* 首个选人确认自举先选方 */
+        tLastConfirm = t;   /* 时间推算锚点:窗口位置 = 已确认数 + 距上次确认的时长折算 */
+      }
     };
     /* seek 跳段补读:直接进板,不记时间轴事件、不过确认规则(帧面即真值,永不回退);
        记入 fillLog 供终态后回放重演板面 */
@@ -1964,6 +2047,7 @@
       if (!rec || rec.empty || !rec.ename) return;
       st.pending = { ename: rec.ename, score: rec.score, slot: rec, t0: st.pending.t0 };
       if (!rulesOk(side, kind, i, rec.ename, rec.score)) return;
+      if (!draftGateOk(side, kind, i)) return;         /* D:选序门控 */
       if (kind === 'pick' && !bansStarted()) return;   /* C:仅约束选人 */
       S.confirm(t, side, kind, i);
     };
@@ -1972,6 +2056,7 @@
       const st = slots[key(side, kind, i)];
       if (!st || !st.pending) return false;
       if (!rulesOk(side, kind, i, st.pending.ename, st.pending.score)) return false;
+      if (!draftGateOk(side, kind, i)) return false;   /* D:选序门控 */
       if (kind === 'pick' && !bansStarted()) return false;
       S.confirm(t, side, kind, i);
       return true;
@@ -2028,6 +2113,17 @@
       Array.from({ length: 5 }, (_, i) => slots[key(side, kind, i)])
         .every(st => st && st.hero != null)));
     S.events = events; S.stats = stats; S.banLog = banLog; S.fillLog = fillLog;
+    let firstPickSrc = null;                 /* 先选方来源:ocr(画面识别) / bootstrap(首手自举) */
+    /* 显式设定先选方(识别步骤:画面提示文字 OCR 命中);已定不覆盖 */
+    S.setFirstPick = side => {
+      if (firstPick || (side !== 'blue' && side !== 'red')) return false;
+      firstPick = side; firstPickSrc = 'ocr'; return true;
+    };
+    S.firstPickSrc = () => firstPickSrc;
+    S.resetTimeAnchor = () => { tLastConfirm = null; };   /* 新一轮解析:清时间锚点 */
+    S.firstPick = () => firstPick;           /* 测试钩子/导入取先选方 */
+    S.draftGateOk = draftGateOk;             /* 测试钩子:步序门控直查 */
+    S.draftStepsNow = () => draftSteps(firstPick || 'blue');  /* 测试钩子:当前步序 */
     return S;
   }
   window.__vidBPSession = vidBPSession; /* 测试钩子 */
@@ -2045,6 +2141,7 @@
                                   故不要求禁满,只要求禁用阶段已开始;纯禁用阶段的
                                   选人槽 UI 幽灵仍被拦。改回 10 = 严格先禁后选。 */
     cropPx: 24,
+    winPerPick: 8,             /* 步序窗口时间推算:每手选人平均时长(秒)——白字窗口跟随游戏节奏 */
   };
   const VID_GROUPS = [['blue', 'ban'], ['red', 'ban'], ['blue', 'pick'], ['red', 'pick']];
 
@@ -2078,6 +2175,8 @@
   let vidPrebanFrames = 0, vidPreRanges = [];
   const prebanDiag = [];   /* 预选扫描 OCR 诊断,{t,hit,text} */
   window.__bpVideoState = () => ({ events: vidEvents, preRanges: vidPreRanges,
+    firstPick: vidSession && vidSession.firstPick ? vidSession.firstPick() : null,
+    firstPickSrc: vidSession && vidSession.firstPickSrc ? vidSession.firstPickSrc() : null,
     stats: { ...(vidSession ? vidSession.stats : { samples: 0, recognitions: 0 }),
              durationS: vidDur, prebanFrames: vidPrebanFrames, prebanDiag },
     state: vidImportState }); /* 测试钩子 */
@@ -2161,34 +2260,47 @@
   /* 横幅条 OCR:取帧顶部 20% 全宽条带(比例无关,覆盖各分辨率下的横幅位置)
      → 缩放到宽 1600 → 白字二值化(亮像素反转为黑字)→ tesseract 识别;
      异常时返回 ''(视为非预选,继续扫描/走手动跳过路径) */
+  /* 顶部条带快照:取 src 顶部 20% 全宽条带 → 1600 宽 → 白字二值化(文字→黑) */
+  function vidBandCanvas(src, srcW, srcH) {
+    const bandH = Math.round(srcH * 0.20);
+    const outW = 1600, outH = Math.max(60, Math.round(1600 * bandH / srcW));
+    const c = document.createElement('canvas');
+    c.width = outW; c.height = outH;
+    const cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+    cx.drawImage(src, 0, 0, srcW, bandH, 0, 0, outW, outH);
+    const px = cx.getImageData(0, 0, outW, outH);
+    const d = px.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+      const ink = v > 170 ? 0 : 255;
+      d[i] = d[i + 1] = d[i + 2] = ink;
+    }
+    cx.putImageData(px, 0, 0);
+    return c;
+  }
+  async function vidOcrCanvas(c) {
+    const worker = await ensureOcrWorker();
+    const { data } = await worker.recognize(c);
+    return (data.text || '').replace(/\s/g, '');
+  }
   async function vidFrameOcrText() {
     try {
-      const worker = await ensureOcrWorker();
-      const W = vidFrameCv.width, H = vidFrameCv.height;
-      const bandH = Math.round(H * 0.20);
-      const outW = 1600, outH = Math.max(60, Math.round(1600 * bandH / W));
-      const c = document.createElement('canvas');
-      c.width = outW; c.height = outH;
-      const cx = c.getContext('2d');
-      cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
-      cx.drawImage(vidFrameCv, 0, 0, W, bandH, 0, 0, outW, outH);
-      /* 白字二值化:亮像素(文字)→黑,背景→白 */
-      const px = cx.getImageData(0, 0, outW, outH);
-      const d = px.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const v = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-        const ink = v > 170 ? 0 : 255;
-        d[i] = d[i + 1] = d[i + 2] = ink;
-      }
-      cx.putImageData(px, 0, 0);
-      const { data } = await worker.recognize(c);
-      return (data.text || '').replace(/\s/g, '');
+      return await vidOcrCanvas(vidBandCanvas(vidFrameCv, vidFrameCv.width, vidFrameCv.height));
     } catch (e) {
       console.warn('预选 OCR 失败:', e && e.message || e);
       return '';
     }
   }
   const isPrebanText = txt => txt.includes('预选');
+  /* 先选方提示解析:画面文字「蓝方/红方 + 先选/先手/优先」→ blue/red */
+  function vidFirstPickHint(txt) {
+    if (!txt) return null;
+    const t = String(txt).replace(/\s/g, '');
+    const m = t.match(/(蓝|红)方?\s*(?:先选|先手|优先)/);
+    return m ? (m[1] === '蓝' ? 'blue' : 'red') : null;
+  }
+  window.__vidFirstPickHint = txt => vidFirstPickHint(txt); /* 测试钩子 */
 
   /* 正式 BP 画面正向确认:识别 10 个禁用槽,≥3 个高置信英雄(score≥0.8)
      即正式 BP 画面(预选画面的禁用位置乱识别分数中等且分散)。 */
@@ -2225,6 +2337,7 @@
   let vidBaseline = null, vidBaselineT = 0;  /* 正式识别起点基线板(回放重演的起点) */
   let vidBanLog = [], vidFillLog = [];       /* 禁用确认/跳段补读日志(回放重演用) */
   let vidFinalState = null;                  /* 终态板(导入恒用;回放显示用) */
+  let vidFirstPick = null;                   /* 识别出的先选方(导入传给模拟器) */
   let vidReplayT = null, vidReplayOff = false, vidReplayBucket = -1;
   /* vidReplayT!=null = 回放跟随中(板随播放位置重演);vidReplayOff = 用户修正过板,跟随退出 */
   const vidSuggestPanel = document.getElementById('vidSuggest');
@@ -2271,6 +2384,23 @@
       .slice(0, 6);
   }
 
+  const vidFpRow = document.getElementById('vidFpRow');
+  const vidFpTxt = document.getElementById('vidFpTxt');
+  let vidFpLastRender = '';
+  /* 先选方展示行:识别出先选方即刻显示(画面识别/首手自举),整轮保留 */
+  function renderVidFp() {
+    const fp = vidSession && vidSession.firstPick ? vidSession.firstPick() : null;
+    if (!fp) { vidFpRow.hidden = true; vidFpLastRender = ''; return; }
+    const src = vidSession.firstPickSrc ? vidSession.firstPickSrc() : null;
+    const sig = `${fp}|${src}`;
+    if (sig === vidFpLastRender) return;
+    vidFpLastRender = sig;
+    const srcTxt = src === 'ocr' ? '画面识别' : '首手自举';
+    vidFpTxt.className = `vid-fp-txt ${fp[0]}`;
+    vidFpTxt.innerHTML = `${SIDE_NAME[fp]} 先选<span class="vid-fp-src">（${srcTxt}）</span>`;
+    vidFpRow.hidden = false;
+  }
+
   function renderVidSuggest() {
     if (!vidImportState || vidMode !== 'formal') { vidSuggestPanel.hidden = true; return; }
     document.getElementById('vidSuggestFor').textContent = SIDE_NAME[vidSuggestSide] + '视角';
@@ -2306,6 +2436,8 @@
     vidEvCount = vidSession.events.length;
     vidPendC = {}; vidPendAge = {};
     vidStableClean = 0;
+    /* 基线即满编(从 BP 结束后开始录):零事件直接出最终板,不走选序窗口重推 */
+    if (vidSession.allFilled()) { vidFinalize('视频开头已是满编阵容'); return; }
     vidImportState = vidSession.board();
     vidNextT = +(t + VID.dt).toFixed(2);
     vidResults.hidden = false;
@@ -2323,6 +2455,8 @@
       let txt = '';
       try { txt = await vidFrameOcrText(); } finally { vidOcrBusy = false; }
       const hit = isPrebanText(txt);
+      const fpHint = vidFirstPickHint(txt);
+      if (fpHint && vidSession && vidSession.setFirstPick(fpHint)) renderVidFp();   /* 先选方识别步骤(扫描期,OCR 本就在跑) */
       prebanDiag.push({ t: +nominalT.toFixed(1), hit, text: txt.slice(0, 40) });
       vidPrebanFrames += hit ? 1 : 0;
       vidBusyTxt.textContent = ` 实时解析 · ${mmss(nominalT)} / ${mmss(vidDur)} · ${hit ? '识别到「预选」横幅' : txt ? 'OCR:' + txt.slice(0, 14) + '…' : '扫描画面文字中…'}`;
@@ -2344,7 +2478,10 @@
       }
       return;
     }
-    /* ── formal:逐槽变化检测 + 状态机确认 ── */
+    /* ── formal:逐槽变化检测 + 状态机确认。槽位区域不做窗口过滤——真实房间
+       帮抢/锁序不按槽号序,窗口游标会卡死漂移(实测教训);确认顺序由选序门控
+       (D)把守:跨方乱序被结构性禁止,同方窗口内任意槽可锁定(帮抢语义)。
+       视频叠加层实时画出当前步序窗口/最近确认槽(用户可见识别位置) ── */
     const t = +nominalT.toFixed(2);
     let acted = false;
     for (const st of vidSlotOrder) {
@@ -2378,6 +2515,9 @@
       }
     }
     vidSession.stats.samples++;
+    vidDrawWatch(vidPlayer.currentTime);   /* 叠加层:三态识别位置(窗口白/已确认实线/未选虚线),窗口按时间推算 */
+    renderVidFp();
+    vidHintScanAsync(t);   /* 先选方识别步骤:首手前后台补扫画面提示文字 */
     vidLastSampleT = t;
     /* 新确认事件:挂整帧快照,即时刷新时间轴/阵容/选人建议(直播伴随分析) */
     if (vidSession.events.length > vidEvCount) {
@@ -2425,8 +2565,16 @@
     vidFinished = true;
     vidLive = false;
     vidPlayer.pause();
+    vidClearWatch();   /* 识别结束:撤下叠加层,不遮挡核对 */
     vidSkipScan.hidden = true;
     if (vidSession) {
+      /* 终局全板兜底扫描:窗口滞塞跳过/从未被窗口覆盖的空槽按最后帧真值补进板
+         (不产生时间轴事件,记 fillLog 供回放重演);待定槽留给 flush 正常确认 */
+      if (vidFrameCv) {
+        const byKey = {};
+        for (const st of vidSlotOrder) byKey[st.side + '-' + st.kind + '-' + st.i] = st;
+        vidSession.sweep(vidLastSampleT || 0, (s2, k2, i2) => vidRecognize(byKey[s2 + '-' + k2 + '-' + i2]));
+      }
       vidSession.flush();
       if (vidSession.events.length > vidEvCount && vidFrameCv) {
         /* flush 兜底产生的尾部事件:画面用最后采样帧 */
@@ -2440,13 +2588,18 @@
       vidImportState = vidSession.board();
       vidEvents = vidSession.events;
     }
+    vidFirstPick = (vidSession && vidSession.firstPick) ? vidSession.firstPick() : null;
     vidFinalState = JSON.parse(JSON.stringify(vidImportState));
     vidPreRanges = mergePreRanges(vidPreHits);
     const totalS = (performance.now() - vidT0) / 1000;
     const preTxt = vidPreRanges.length
       ? ` · 预选阶段：<b>${vidPreRanges.map(r => `${mmss(r.start)} - ${mmss(r.end)}`).join('、')}</b>`
       : (prebanDiag.length ? ` · <span title="逐帧 OCR 顶部画面,未发现「请预选您想玩的英雄」文字">未检测到预选阶段（已 OCR ${prebanDiag.length} 帧）</span>` : '');
-    vidTiming.innerHTML = `<span class="ms">timer</span>实时解析完成 <b>${totalS.toFixed(1)}</b> 秒 · 采样 <b>${vidSession ? vidSession.stats.samples : 0}</b> 帧 · <b>${vidEvents.length}</b> 手选人（禁用直接读取,不上时间轴）${preTxt}${extraNote ? ' · <b>' + extraNote + '</b>' : ''}`;
+    renderVidFp();
+    const fpNow = vidSession && vidSession.firstPick ? vidSession.firstPick() : null;
+    const fpSrc = vidSession && vidSession.firstPickSrc ? vidSession.firstPickSrc() : null;
+    const fpNote = fpNow ? ` · 先选方 <b>${SIDE_NAME[fpNow]}</b>（${fpSrc === 'ocr' ? '画面识别' : '首手自举'}）` : '';
+    vidTiming.innerHTML = `<span class="ms">timer</span>实时解析完成 <b>${totalS.toFixed(1)}</b> 秒 · 采样 <b>${vidSession ? vidSession.stats.samples : 0}</b> 帧 · <b>${vidEvents.length}</b> 手选人（禁用直接读取,不上时间轴）${preTxt}${extraNote ? ' · <b>' + extraNote + '</b>' : ''}${fpNote}`;
     vidTiming.hidden = false;
     vidBusy.hidden = true;
     vidResults.hidden = false;
@@ -2459,6 +2612,7 @@
   async function vidParseFile(file) {
     vidErr.hidden = true;
     vidTiming.hidden = true; vidMapWrap.hidden = true;
+    if (typeof vidFpRow !== 'undefined' && vidFpRow) { vidFpRow.hidden = true; vidFpLastRender = ''; }
     vidReanalyze.hidden = true; vidImportBtn.hidden = true;
     vidResults.hidden = true; vidTimeline.hidden = true;
     vidSuggestPanel.hidden = true;
@@ -2473,11 +2627,16 @@
     vidScanHintShown = false; vidPumpBusy = false; vidOcrBusy = false;
     vidBaseline = null; vidBaselineT = 0; vidBanLog = []; vidFillLog = [];
     vidFinalState = null; vidReplayT = null; vidReplayOff = false; vidReplayBucket = -1;
+    vidFirstPick = null;
+    vidHintBusy = false; vidHintScans = 0; vidHintLastT = -9;
+    if (vidSession) vidSession.resetTimeAnchor();
+    if (vidSession) { vidSession.winOffset = () => 0; }   /* 新会话自然归零;旧引用防御 */
     vidT0 = performance.now();
     try {
       if (vidUrl) URL.revokeObjectURL(vidUrl);
       vidUrl = URL.createObjectURL(file);
       vidPlayer.src = vidUrl;   /* 立即挂载:loadedmetadata/onerror 都由主栏播放器触发 */
+      vidPlayer.muted = true;   /* 导入默认静音(解析播放不干扰),需要声音可在播放器手动取消 */
       vidBusyTxt.textContent = ' 读取视频元数据…';
       const meta = await new Promise((ok, no) => {
         const to = setTimeout(() => no(new Error('读取视频超时')), 20000);
@@ -2517,7 +2676,7 @@
         }
       vidSession = vidBPSession();
       ensureOcrWorker().catch(() => {});   /* OCR worker 预热(首次初始化 2-3s,提前到播放前) */
-      /* 展示实时面板并开始播放(用户手势链内 play,被拦时静音重试) */
+      /* 展示实时面板并开始播放(已默认静音:手势链过期也不被自动播放策略拦截) */
       vidDrop.hidden = true;
       vidBody.hidden = false;
       vidShowStage('video');
@@ -2530,8 +2689,7 @@
       vidLive = true; vidFinished = false;
       vidSkipScan.hidden = false;
       requestAnimationFrame(vidPump);
-      try { await vidPlayer.play(); }
-      catch (e) { vidPlayer.muted = true; await vidPlayer.play(); }
+      await vidPlayer.play();
       if (warnings.length) {
         vidErr.textContent = '⚠ ' + warnings.join('；');
         vidErr.hidden = false;
@@ -2613,7 +2771,7 @@
     const cv = vidSlotMap;
     cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
     cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
-    paintSlotBoxes(cv, vidImportState, vidMapHighlight);
+    paintSlotBoxes(cv.getContext('2d'), cv.width, cv.height, vidImportState, vidMapHighlight);
   }
 
   /* 当前解析帧 → 1280 宽 JPEG 快照(事件 fullFrame,供主栏对应帧视图) */
@@ -2626,6 +2784,40 @@
     return c.toDataURL('image/jpeg', 0.8);
   }
 
+  /* ---------- 视频叠加层:实时画出当前识别位置(步序窗口/最近确认槽) ----------
+     canvas 盖在视频画面上(pointer-events:none 不挡控制条);按 contain 适配
+     视频显示矩形,把帧坐标槽位框映射到屏幕。用户可直接看到"正在按选序盯哪里"。 */
+  const vidWatchCv = document.getElementById('vidWatchCv');
+  function vidDrawWatch(watch) {
+    if (!vidFrameCv || vidPlayer.hidden || vidPlayer.clientWidth < 40) return;
+    vidWatchCv.hidden = false;
+    vidWatchCv.width = vidPlayer.clientWidth; vidWatchCv.height = vidPlayer.clientHeight;
+    const vw = vidFrameCv.width, vh = vidFrameCv.height;
+    const fit = Math.min(vidWatchCv.width / vw, vidWatchCv.height / vh);   /* contain 适配 */
+    const dx = (vidWatchCv.width - vw * fit) / 2, dy = (vidWatchCv.height - vh * fit) / 2;
+    const ctx = vidWatchCv.getContext('2d');
+    ctx.clearRect(0, 0, vidWatchCv.width, vidWatchCv.height);
+    ctx.setTransform(fit, 0, 0, fit, dx, dy);
+    const state = vidSession ? vidSession.board() : null;
+    if (state) paintSlotBoxes(ctx, vw, vh, state, vidSession.watchWindow(vidPlayer.currentTime));
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  function vidClearWatch() { vidWatchCv.hidden = true; vidWatchCv.getContext('2d').clearRect(0, 0, vidWatchCv.width, vidWatchCv.height); }
+  /* 先选方识别步骤(正式模式补扫):后台 OCR 顶部条带快照,不阻塞采样泵;
+     自举完成(先选方已定)或累计 6 次后停止 */
+  let vidHintBusy = false, vidHintScans = 0, vidHintLastT = -9;
+  function vidHintScanAsync(t) {
+    if (vidHintBusy || vidHintScans >= 6 || t - vidHintLastT < 3) return;
+    if (!vidFrameCv || (vidSession && vidSession.firstPick())) return;
+    vidHintBusy = true; vidHintScans++; vidHintLastT = t;
+    const snap = vidBandCanvas(vidFrameCv, vidFrameCv.width, vidFrameCv.height);
+    vidOcrCanvas(snap).then(txt => {
+      const h = vidFirstPickHint(txt);
+      if (h && vidSession && vidSession.setFirstPick(h)) console.info('先选方识别(画面):', h);
+    }).catch(() => {}).finally(() => { vidHintBusy = false; });
+  }
+  window.addEventListener('resize', () => { if (vidLive && vidFrameCv && vidSession) vidDrawWatch(vidSession.watchSet()); });
+
   /* ---------- 主栏舞台三视图:视频(默认,可播放)/位置图/对应帧 ---------- */
   let vidStageMode = 'video', vidStagePrev = 'video';
   function vidSeekPlayer(t) {
@@ -2637,6 +2829,7 @@
     if (mode === 'frame' && vidStageMode !== 'frame') vidStagePrev = vidStageMode;
     vidStageMode = mode;
     vidPlayer.hidden = mode !== 'video';
+    if (mode !== 'video') vidClearWatch();
     vidMapWrap.hidden = mode !== 'map';
     vidFrameWrap.hidden = mode !== 'frame';
     document.getElementById('vidTabVideo').classList.toggle('on', mode === 'video');
@@ -2772,18 +2965,21 @@
     vidLive = false; vidFinished = true; vidMode = 'scan';
     vidPlayer.pause(); vidPlayer.removeAttribute('src'); vidPlayer.load();
     vidStageMode = 'video';
+    vidClearWatch();
     vidPreRanges = []; vidPreHits = [];
     vidBaseline = null; vidFinalState = null; vidReplayT = null; vidReplayOff = false;
+    vidFirstPick = null;
     vidBanLog = []; vidFillLog = []; vidReplayBucket = -1;
     vidSkipScan.hidden = true;
     vidSuggestPanel.hidden = true;
+    vidFpRow.hidden = true; vidFpLastRender = '';
     vidBody.hidden = true;
     vidTiming.hidden = true; vidErr.hidden = true;
     vidReanalyze.hidden = true; vidImportBtn.hidden = true;
     vidDrop.hidden = false; vidFile.value = '';
   });
   vidImportBtn.addEventListener('click', () =>
-    applyState(vidReplayT != null && vidFinalState ? vidFinalState : vidImportState, vidDlg));
+    applyState(vidReplayT != null && vidFinalState ? vidFinalState : vidImportState, vidDlg, vidFirstPick));
     /* 回放跟随中导入的是重演显示板,恒取终态结果;跟随退出后 vidImportState 即(可修正过的)终态 */
   vidDlg.addEventListener('dragover', e => { e.preventDefault(); vidDrop.classList.add('drag'); });
   vidDlg.addEventListener('dragleave', () => vidDrop.classList.remove('drag'));
@@ -2832,7 +3028,7 @@
     <span class="sp"></span>
     <button class="icon-btn" id="vidClose" aria-label="关闭"><span class="ms">close</span></button>
   </div>
-  <p class="imp-tip">上传一段<b>横屏</b>排位 BP 录屏，<b>按视频播放速度实时跟随解析</b>（模拟游戏进行中）：播放的同时本地逐帧识别——OCR 检测「请预选您想玩的英雄」定位预选阶段（仅记录时间段，不参与正式解析），正式的禁用/选人过程<b>实时出结果</b>（禁用直接读取全部，不上时间轴），选人阶段<b>实时给出选人建议</b>（克制对方已选、反制对方禁用意图，可切蓝/红视角），生成 <b>BP 时间轴</b>与最终阵容。点击右侧时间轴条目查看对应帧（会暂停播放，切回视频视图继续解析），可随时暂停/拖动（拖动只补读跳过的空槽，板不跳变）；<b>解析完成后拖动/重播视频，阵容板会跟随播放进度重演</b>（时间轴未播到的动作变淡，点击槽位修正则切换到最终板，导入恒为最终结果）。全程在本页本地完成；视频编码需浏览器可解码（手机默认 H.264 即可，HEVC/H.265 录屏请先转码 MP4）。每 1 秒采样一次。</p>
+  <p class="imp-tip">上传一段<b>横屏</b>排位 BP 录屏，<b>按视频播放速度实时跟随解析</b>（模拟游戏进行中）：播放的同时本地逐帧识别——OCR 检测「请预选您想玩的英雄」定位预选阶段（仅记录时间段，不参与正式解析），正式的禁用/选人过程<b>实时出结果</b>（禁用直接读取全部，不上时间轴），选人阶段<b>实时给出选人建议</b>（克制对方已选、反制对方禁用意图，可切蓝/红视角），生成 <b>BP 时间轴</b>与最终阵容。点击右侧时间轴条目查看对应帧（会暂停播放，切回视频视图继续解析），可随时暂停/拖动（拖动只补读跳过的空槽，板不跳变）；<b>解析完成后拖动/重播视频，阵容板会跟随播放进度重演</b>（时间轴未播到的动作变淡，点击槽位修正则切换到最终板，导入恒为最终结果）。全程在本页本地完成；视频编码需浏览器可解码（手机默认 H.264 即可，HEVC/H.265 录屏请先转码 MP4）。每 1 秒采样一次。选人确认按 <b>1-2-2-2-2-1 选人顺序</b>把守（先选方开局自动判定——蓝1/红1 先锁定者即先选方；先手帮抢照常识别），<b>视频上实时高亮当前按选序盯的槽位区域</b>，识别进度看得见。引擎 v2026.11.08。</p>
   <div id="vidDrop" class="imp-drop">
     <span class="ms">movie</span>
     <div>点击选择视频，或直接 <b>拖拽视频文件</b> 到这里</div>
@@ -2852,6 +3048,7 @@
       </div>
       <div class="vid-stage">
         <video id="vidPlayer" controls preload="metadata" hidden></video>
+        <canvas id="vidWatchCv" hidden></canvas>
         <div id="vidFrameWrap" class="vid-frame-wrap" hidden>
           <span class="vid-frame-hint" id="vidFrameHint" hidden></span>
           <img id="vidFrameImg" alt="对应帧">
@@ -2860,6 +3057,10 @@
           <canvas id="vidSlotMap"></canvas>
           <span class="imp-map-tip">识别位置图：视频末帧画面上标出 20 个槽位（虚线=未识别），点击槽位卡片或图中框位可修正 · 点击图片可查看大图</span>
         </div>
+      </div>
+      <div id="vidFpRow" class="vid-pre-row" hidden>
+        <span class="vid-pre-hd"><span class="ms">flag</span>先选方</span>
+        <span class="vid-fp-txt" id="vidFpTxt"></span>
       </div>
       <div id="vidPreRow" class="vid-pre-row" hidden>
         <span class="vid-pre-hd"><span class="ms">back_hand</span>预选阶段</span>
